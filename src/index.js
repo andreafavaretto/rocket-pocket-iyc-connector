@@ -356,6 +356,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           justify-content: flex-start;
         }
 
+        .ops-section h2 {
+          margin: 0;
+        }
+
         .ops-section p {
           margin: 0;
         }
