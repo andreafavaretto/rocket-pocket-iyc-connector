@@ -80,13 +80,16 @@ function extractAnchors(drawingXml) {
 
   while (anchorMatch) {
     const block = anchorMatch[0];
-    const fromMatch = block.match(/<(?:xdr:)?from>[\s\S]*?<(?:xdr:)?row>(\d+)<\/(?:xdr:)?row>[\s\S]*?<(?:xdr:)?col>(\d+)<\/(?:xdr:)?col>[\s\S]*?<\/(?:xdr:)?from>/);
+    const fromBlockMatch = block.match(/<(?:xdr:)?from>([\s\S]*?)<\/(?:xdr:)?from>/);
+    const fromBlock = fromBlockMatch ? fromBlockMatch[1] : '';
+    const rowMatch = fromBlock.match(/<(?:xdr:)?row>(\d+)<\/(?:xdr:)?row>/);
+    const colMatch = fromBlock.match(/<(?:xdr:)?col>(\d+)<\/(?:xdr:)?col>/);
     const relMatch = block.match(/(?:r:embed|embed)="([^"]+)"/);
 
-    if (fromMatch && relMatch) {
+    if (rowMatch && colMatch && relMatch) {
       anchors.push({
-        row: Number(fromMatch[1]),
-        col: Number(fromMatch[2]),
+        row: Number(rowMatch[1]),
+        col: Number(colMatch[1]),
         relationId: relMatch[1]
       });
     }
