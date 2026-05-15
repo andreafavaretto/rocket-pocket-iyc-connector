@@ -318,6 +318,7 @@ async function runCatalogSync(options = {}) {
   const markupPercent = Number(state.settings.markupPercent || 0);
 
   const catalogProducts = await loadCatalog();
+  console.log('[CATALOG] loaded', { count: catalogProducts.length, startedAt });
   const summary = {
     startedAt,
     markupPercent,
@@ -334,6 +335,7 @@ async function runCatalogSync(options = {}) {
   };
 
   if (onProgress) {
+    console.log('[CATALOG] calling onProgress with initial summary', { scanned: summary.scanned });
     onProgress({ ...summary, errorsCount: 0, stage: 'running' });
   }
 

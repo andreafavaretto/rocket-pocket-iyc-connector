@@ -1177,6 +1177,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                   return;
                 }
 
+                if (nextSync.running) {
+                  console.log('[POLL] sync running', {
+                    processed: nextSync.processed,
+                    scanned: nextSync.scanned,
+                    currentProduct: nextSync.currentProduct ? nextSync.currentProduct.title : null
+                  });
+                }
+
                 const nextLastSync = payload && payload.state ? payload.state.lastSync : null;
 
                 setSync(nextSync);
@@ -1788,8 +1796,14 @@ function startSync(trigger) {
 
   setImmediate(async () => {
     try {
+      console.log('[SYNC] starting', { trigger, startedAt: syncRuntime.startedAt });
       const report = await runCatalogSync({
         onProgress: progress => {
+          console.log('[SYNC] progress', {
+            processed: progress.processed,
+            scanned: progress.scanned,
+            currentProduct: progress.currentProduct ? progress.currentProduct.title : null
+          });
           syncRuntime.processed = Number(progress.processed || 0);
           syncRuntime.scanned = Number(progress.scanned || 0);
           syncRuntime.synced = Number(progress.synced || 0);
