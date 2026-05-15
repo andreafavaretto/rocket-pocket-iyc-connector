@@ -312,13 +312,19 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .ops-widget {
-          display: grid;
+          display: flex;
+          flex-direction: column;
           gap: 18px;
+          align-items: stretch;
+          justify-content: flex-start;
         }
 
         .ops-section {
-          display: grid;
+          display: flex;
+          flex-direction: column;
           gap: 10px;
+          align-items: stretch;
+          justify-content: flex-start;
         }
 
         .ops-section + .ops-section {

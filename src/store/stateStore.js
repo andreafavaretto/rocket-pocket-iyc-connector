@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const config = require('../config');
 
+const stateBackupFile = `${config.paths.stateFile}.bak`;
+
 const DEFAULT_STATE = {
   settings: {
     markupPercent: config.pricing.defaultMarkupPercent
@@ -32,42 +34,61 @@ function ensureStateFile() {
     if (!fs.existsSync(config.paths.stateFile)) {
       fs.writeFileSync(config.paths.stateFile, JSON.stringify(DEFAULT_STATE, null, 2), 'utf8');
     }
+
+    if (!fs.existsSync(stateBackupFile)) {
+      fs.writeFileSync(stateBackupFile, JSON.stringify(DEFAULT_STATE, null, 2), 'utf8');
+    }
   } catch (error) {
     console.error('[STATE] Failed to ensure state file:', error.message);
     throw error;
   }
 }
 
+function readJsonFile(filePath) {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  return JSON.parse(raw);
+}
+
+function normalizeState(parsed) {
+  return {
+    ...DEFAULT_STATE,
+    ...parsed,
+    settings: {
+      ...DEFAULT_STATE.settings,
+      ...(parsed.settings || {})
+    },
+    shopifyAuth: {
+      ...DEFAULT_STATE.shopifyAuth,
+      ...(parsed.shopifyAuth || {}),
+      installations: {
+        ...DEFAULT_STATE.shopifyAuth.installations,
+        ...((parsed.shopifyAuth && parsed.shopifyAuth.installations) || {})
+      },
+      pendingStates: {
+        ...DEFAULT_STATE.shopifyAuth.pendingStates,
+        ...((parsed.shopifyAuth && parsed.shopifyAuth.pendingStates) || {})
+      }
+    },
+    products: parsed.products || {}
+  };
+}
+
 function readState() {
   try {
     ensureStateFile();
-    const raw = fs.readFileSync(config.paths.stateFile, 'utf8');
-    const parsed = JSON.parse(raw);
-
-    return {
-      ...DEFAULT_STATE,
-      ...parsed,
-      settings: {
-        ...DEFAULT_STATE.settings,
-        ...(parsed.settings || {})
-      },
-      shopifyAuth: {
-        ...DEFAULT_STATE.shopifyAuth,
-        ...(parsed.shopifyAuth || {}),
-        installations: {
-          ...DEFAULT_STATE.shopifyAuth.installations,
-          ...((parsed.shopifyAuth && parsed.shopifyAuth.installations) || {})
-        },
-        pendingStates: {
-          ...DEFAULT_STATE.shopifyAuth.pendingStates,
-          ...((parsed.shopifyAuth && parsed.shopifyAuth.pendingStates) || {})
-        }
-      },
-      products: parsed.products || {}
-    };
+    const parsed = readJsonFile(config.paths.stateFile);
+    return normalizeState(parsed);
   } catch (error) {
-    console.error('[STATE] Failed to read state, returning defaults:', error.message);
-    return cloneDefaultState();
+    try {
+      const backupParsed = readJsonFile(stateBackupFile);
+      const normalized = normalizeState(backupParsed);
+      writeState(normalized);
+      console.warn('[STATE] Recovered state from backup file due to primary read failure.');
+      return normalized;
+    } catch (backupError) {
+      console.error('[STATE] Failed to read state and backup, returning defaults:', error.message, backupError.message);
+      return cloneDefaultState();
+    }
   }
 }
 
@@ -76,7 +97,16 @@ function writeState(nextState) {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-  fs.writeFileSync(config.paths.stateFile, JSON.stringify(nextState, null, 2), 'utf8');
+
+  const payload = JSON.stringify(nextState, null, 2);
+  const tmpFile = `${config.paths.stateFile}.tmp`;
+
+  // Write to a temp file first to avoid partial writes corrupting the state file.
+  fs.writeFileSync(tmpFile, payload, 'utf8');
+  fs.renameSync(tmpFile, config.paths.stateFile);
+
+  // Keep a backup copy for recovery if the primary file ever becomes invalid.
+  fs.writeFileSync(stateBackupFile, payload, 'utf8');
 }
 
 function getMarkupPercent() {
