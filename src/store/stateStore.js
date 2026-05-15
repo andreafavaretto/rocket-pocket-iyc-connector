@@ -120,7 +120,18 @@ function getShopifyInstallation(shopDomain) {
     return null;
   }
 
-  return state.shopifyAuth.installations[key] || null;
+  const direct = state.shopifyAuth.installations[key] || null;
+  if (direct) {
+    return direct;
+  }
+
+  // Fallback: if there is exactly one installation saved, reuse it.
+  const installationKeys = Object.keys(state.shopifyAuth.installations || {});
+  if (installationKeys.length === 1) {
+    return state.shopifyAuth.installations[installationKeys[0]] || null;
+  }
+
+  return null;
 }
 
 function getShopifyAdminAccessToken(shopDomain) {

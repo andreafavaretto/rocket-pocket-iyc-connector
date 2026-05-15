@@ -470,7 +470,15 @@ app.get(['/', '/app'], (req, res) => {
 });
 
 app.get('/auth/start', (req, res) => {
-  const shop = String(req.query.shop || config.shopify.storeDomain || '').trim();
+  const configuredShop = String(config.shopify.storeDomain || '').trim().toLowerCase();
+  const queryShop = String(req.query.shop || '').trim().toLowerCase();
+
+  if (queryShop && configuredShop && queryShop !== configuredShop) {
+    redirectWithMessage(res, 'error', `Apri l'app nello store configurato (${configuredShop}) e riprova.`);
+    return;
+  }
+
+  const shop = configuredShop;
   if (!isValidShopDomain(shop)) {
     redirectWithMessage(res, 'error', 'Shop Shopify non valido per l\'autorizzazione.');
     return;
@@ -511,6 +519,11 @@ app.get('/auth/callback', async (req, res) => {
 
   if (!validateShopifyHmac(req.query)) {
     redirectWithMessage(res, 'error', 'Validazione HMAC Shopify fallita.');
+    return;
+  }
+
+  if (shop !== config.shopify.storeDomain) {
+    redirectWithMessage(res, 'error', `Callback ricevuto per store diverso (${shop}). Store configurato: ${config.shopify.storeDomain}.`);
     return;
   }
 
