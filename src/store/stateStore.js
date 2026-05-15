@@ -18,6 +18,10 @@ function cloneDefaultState() {
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
 
+function normalizeShopDomain(shopDomain) {
+  return String(shopDomain || '').trim().toLowerCase();
+}
+
 function ensureStateFile() {
   try {
     const dir = path.dirname(config.paths.stateFile);
@@ -89,24 +93,34 @@ function setMarkupPercent(markupPercent) {
 
 function setShopifyInstallation(shopDomain, installation) {
   const state = readState();
-  state.shopifyAuth.installations[shopDomain] = {
-    ...(state.shopifyAuth.installations[shopDomain] || {}),
+  const key = normalizeShopDomain(shopDomain);
+  if (!key) {
+    throw new Error('Shop domain non valido durante il salvataggio OAuth.');
+  }
+
+  state.shopifyAuth.installations[key] = {
+    ...(state.shopifyAuth.installations[key] || {}),
     ...installation,
     updatedAt: new Date().toISOString()
   };
   writeState(state);
 
-  const persisted = getShopifyInstallation(shopDomain);
+  const persisted = getShopifyInstallation(key);
   if (!persisted || !persisted.adminAccessToken) {
     throw new Error('Impossibile salvare il token OAuth nello stato persistente. Verifica DATA_DIR/volume.');
   }
 
-  return state.shopifyAuth.installations[shopDomain];
+  return state.shopifyAuth.installations[key];
 }
 
 function getShopifyInstallation(shopDomain) {
   const state = readState();
-  return state.shopifyAuth.installations[shopDomain] || null;
+  const key = normalizeShopDomain(shopDomain);
+  if (!key) {
+    return null;
+  }
+
+  return state.shopifyAuth.installations[key] || null;
 }
 
 function getShopifyAdminAccessToken(shopDomain) {
@@ -117,7 +131,7 @@ function getShopifyAdminAccessToken(shopDomain) {
 function createPendingOAuthState(nonce, shopDomain) {
   const state = readState();
   state.shopifyAuth.pendingStates[nonce] = {
-    shopDomain,
+    shopDomain: normalizeShopDomain(shopDomain),
     createdAt: new Date().toISOString()
   };
   writeState(state);

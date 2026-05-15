@@ -498,7 +498,7 @@ app.get('/auth/start', (req, res) => {
 });
 
 app.get('/auth/callback', async (req, res) => {
-  const shop = String(req.query.shop || '').trim();
+  const shop = String(req.query.shop || '').trim().toLowerCase();
   const code = String(req.query.code || '').trim();
   const nonce = String(req.query.state || '').trim();
   const cookies = parseCookies(req.headers.cookie || '');

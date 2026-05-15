@@ -35,8 +35,8 @@ module.exports = {
     gid: process.env.GOOGLE_SHEET_GID || '0'
   },
   shopify: {
-    storeDomain: required('SHOPIFY_STORE_DOMAIN'),
-    adminAccessToken: process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || '',
+    storeDomain: required('SHOPIFY_STORE_DOMAIN').trim().toLowerCase(),
+    adminAccessToken: (process.env.SHOPIFY_ADMIN_ACCESS_TOKEN || '').trim(),
     clientId: process.env.SHOPIFY_API_KEY || process.env.SHOPIFY_CLIENT_ID || '',
     clientSecret: process.env.SHOPIFY_API_SECRET || process.env.SHOPIFY_CLIENT_SECRET || '',
     accessScopes: process.env.SHOPIFY_ACCESS_SCOPES || 'read_products,write_products',
