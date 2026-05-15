@@ -1,8 +1,10 @@
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const express = require('express');
+const { Server: SocketIOServer } = require('socket.io');
 const cron = require('node-cron');
 const config = require('./config');
 const stateStore = require('./store/stateStore');
@@ -10,6 +12,11 @@ const { runCatalogSync } = require('./services/catalogSyncService');
 const shopify = require('./services/shopifyService');
 
 const app = express();
+const httpServer = http.createServer(app);
+const io = new SocketIOServer(httpServer, {
+  path: '/socket.io',
+  transports: ['websocket', 'polling']
+});
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
 
@@ -1112,6 +1119,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <script id="dashboard-products" type="application/json">${serializeForScript(dashboardProductsPayload)}</script>
       <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
       <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+      <script src="/socket.io/socket.io.js"></script>
       <script>
         (function () {
           const escapeClientHtml = function (value) {
@@ -1406,7 +1414,25 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
             poll();
             const timer = setInterval(poll, 2000);
+            let socket = null;
             let stream = null;
+
+            if (typeof window.io === 'function') {
+              try {
+                socket = window.io({
+                  path: '/socket.io',
+                  transports: ['websocket', 'polling']
+                });
+                socket.on('sync:snapshot', function (payload) {
+                  const nextSync = payload && payload.sync ? payload.sync : null;
+                  if (nextSync) {
+                    renderFallbackSync(nextSync);
+                  }
+                });
+              } catch (_error) {
+                socket = null;
+              }
+            }
 
             if (typeof window.EventSource === 'function') {
               try {
@@ -1429,6 +1455,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
             return function () {
               clearInterval(timer);
+              if (socket) {
+                socket.disconnect();
+              }
               if (stream) {
                 stream.close();
               }
@@ -1483,7 +1512,22 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               poll();
               const timer = setInterval(poll, 2000);
 
+              let socket = null;
               let stream = null;
+              if (typeof window.io === 'function') {
+                try {
+                  socket = window.io({
+                    path: '/socket.io',
+                    transports: ['websocket', 'polling']
+                  });
+                  socket.on('sync:snapshot', function (payload) {
+                    applySyncSnapshot(payload);
+                  });
+                } catch (_error) {
+                  socket = null;
+                }
+              }
+
               if (typeof window.EventSource === 'function') {
                 try {
                   stream = new window.EventSource('/app/sync/stream');
@@ -1513,6 +1557,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 clearInterval(timer);
                 document.removeEventListener('visibilitychange', onWake);
                 window.removeEventListener('focus', onWake);
+                if (socket) {
+                  socket.disconnect();
+                }
                 if (stream) {
                   stream.close();
                 }
@@ -1808,7 +1855,9 @@ function buildSyncSnapshotPayload(lastSyncOverride) {
 }
 
 function emitSyncSnapshot(lastSyncOverride) {
-  syncEvents.emit('snapshot', buildSyncSnapshotPayload(lastSyncOverride));
+  const snapshot = buildSyncSnapshotPayload(lastSyncOverride);
+  syncEvents.emit('snapshot', snapshot);
+  io.emit('sync:snapshot', snapshot);
 }
 
 app.get(['/', '/app'], (req, res) => {
@@ -2073,6 +2122,11 @@ let isSyncRunning = false;
 let isHydratingProducts = false;
 const syncEvents = new EventEmitter();
 syncEvents.setMaxListeners(0);
+
+io.on('connection', socket => {
+  socket.emit('sync:snapshot', buildSyncSnapshotPayload());
+});
+
 const syncRuntimeFile = path.resolve(config.paths.dataDir, 'sync-runtime.json');
 const DEFAULT_SHARED_SYNC_RUNTIME = {
   running: false,
@@ -2377,7 +2431,7 @@ async function bootstrap() {
   }
 
   // Start HTTP server
-  app.listen(config.server.port, () => {
+  httpServer.listen(config.server.port, () => {
     console.log(`[HTTP] Listening on port ${config.server.port}`);
     
     // Start cron after server is up
