@@ -227,7 +227,8 @@ async function upsertProduct(productPayload, previousState) {
   };
 }
 
-async function runCatalogSync() {
+async function runCatalogSync(options = {}) {
+  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
   const startedAt = new Date().toISOString();
   const state = stateStore.readState();
   const markupPercent = Number(state.settings.markupPercent || 0);
@@ -237,16 +238,26 @@ async function runCatalogSync() {
     startedAt,
     markupPercent,
     scanned: catalogProducts.length,
+    processed: 0,
     synced: 0,
     skipped: 0,
     errors: []
   };
 
-  for (const product of catalogProducts) {
+  if (onProgress) {
+    onProgress({ ...summary, errorsCount: 0, stage: 'running' });
+  }
+
+  for (let index = 0; index < catalogProducts.length; index += 1) {
+    const product = catalogProducts[index];
     try {
       const payload = ensureProductPayload(product, markupPercent);
       if (!payload) {
         summary.skipped += 1;
+        summary.processed = index + 1;
+        if (onProgress) {
+          onProgress({ ...summary, errorsCount: summary.errors.length, stage: 'running' });
+        }
         continue;
       }
 
@@ -261,8 +272,14 @@ async function runCatalogSync() {
       };
 
       summary.synced += 1;
+      summary.processed = index + 1;
     } catch (error) {
       summary.errors.push({ productName: product.name, message: error.message });
+      summary.processed = index + 1;
+    }
+
+    if (onProgress) {
+      onProgress({ ...summary, errorsCount: summary.errors.length, stage: 'running' });
     }
   }
 
@@ -270,6 +287,10 @@ async function runCatalogSync() {
     ...summary,
     finishedAt: new Date().toISOString()
   };
+
+  if (onProgress) {
+    onProgress({ ...state.lastSync, errorsCount: state.lastSync.errors.length, stage: 'completed' });
+  }
 
   stateStore.writeState(state);
   return state.lastSync;

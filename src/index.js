@@ -28,7 +28,11 @@ function formatTimestamp(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('it-IT');
 }
 
-function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncRunning = false, syncStartedAt = null }) {
+function serializeForScript(value) {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncRunning = false, syncStartedAt = null, syncRuntime = null }) {
   const markupPercent = stateStore.getMarkupPercent();
   const installation = stateStore.getShopifyInstallation(config.shopify.storeDomain);
   const hasStoredInstallation = Boolean(installation && installation.adminAccessToken);
@@ -79,6 +83,25 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .map(error => `<li><strong>${escapeHtml(error.productName || 'Unknown product')}:</strong> ${escapeHtml(error.message)}</li>`)
         .join('')
     : '<li>Nessun errore registrato.</li>';
+
+  const runtime = syncRuntime || {
+    processed: 0,
+    scanned: 0,
+    synced: 0,
+    skipped: 0,
+    errorsCount: 0
+  };
+  const initialDashboardPayload = {
+    sync: {
+      running: isSyncRunning,
+      startedAt: syncStartedAt,
+      processed: Number(runtime.processed || 0),
+      scanned: Number(runtime.scanned || 0),
+      synced: Number(runtime.synced || 0),
+      skipped: Number(runtime.skipped || 0),
+      errorsCount: Number(runtime.errorsCount || 0)
+    }
+  };
 
   return `<!doctype html>
   <html lang="it">
@@ -370,10 +393,12 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             <article class="panel card">
               <h2>Sync manuale</h2>
               <p>Usa questo comando per forzare subito il caricamento del catalogo dal Google Sheet e aggiornare i prodotti su Shopify.</p>
-              <form method="post" action="/app/sync">
-                <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
-              </form>
-              ${isSyncRunning ? `<p>Un processo di sincronizzazione è già attivo dal ${escapeHtml(formatTimestamp(syncStartedAt))}.</p>` : ''}
+              <div id="sync-react-root"></div>
+              <noscript>
+                <form method="post" action="/app/sync">
+                  <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+                </form>
+              </noscript>
             </article>
 
             <article class="panel card">
@@ -409,6 +434,122 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           </article>
         </section>
       </main>
+      <script id="dashboard-bootstrap" type="application/json">${serializeForScript(initialDashboardPayload)}</script>
+      <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+      <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+      <script>
+        (function () {
+          const rootNode = document.getElementById('sync-react-root');
+          const bootstrapNode = document.getElementById('dashboard-bootstrap');
+          if (!rootNode || !bootstrapNode || !window.React || !window.ReactDOM) {
+            return;
+          }
+
+          const bootstrap = JSON.parse(bootstrapNode.textContent || '{}');
+          const e = window.React.createElement;
+
+          function SyncWidget() {
+            const initialSync = bootstrap.sync || {};
+            const [sync, setSync] = window.React.useState(initialSync);
+            const [message, setMessage] = window.React.useState('');
+            const [wasRunning, setWasRunning] = window.React.useState(Boolean(initialSync.running));
+
+            const refreshStatus = window.React.useCallback(async function () {
+              try {
+                const response = await fetch('/app/state', { cache: 'no-store' });
+                if (!response.ok) {
+                  return;
+                }
+
+                const payload = await response.json();
+                const nextSync = payload && payload.sync ? payload.sync : null;
+                if (!nextSync) {
+                  return;
+                }
+
+                setSync(nextSync);
+
+                if (nextSync.running) {
+                  setWasRunning(true);
+                }
+
+                if (!nextSync.running && wasRunning) {
+                  window.location.reload();
+                }
+              } catch (_error) {
+                // Ignore transient polling errors.
+              }
+            }, [wasRunning]);
+
+            window.React.useEffect(function () {
+              const timer = setInterval(refreshStatus, 2000);
+              return function () { clearInterval(timer); };
+            }, [refreshStatus]);
+
+            const progressPercent = sync.scanned > 0
+              ? Math.min(100, Math.round((sync.processed / sync.scanned) * 100))
+              : 0;
+
+            const onStart = async function () {
+              setMessage('Avvio sync...');
+              try {
+                const response = await fetch('/app/sync/start', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+                const payload = await response.json();
+                if (!response.ok) {
+                  setMessage(payload.error || 'Impossibile avviare il sync.');
+                  return;
+                }
+
+                setMessage(payload.message || 'Sync avviato in background.');
+                refreshStatus();
+              } catch (_error) {
+                setMessage('Errore di rete durante avvio sync.');
+              }
+            };
+
+            return e('div', { style: { display: 'grid', gap: '12px' } }, [
+              e('button', {
+                key: 'button',
+                type: 'button',
+                onClick: onStart,
+                disabled: Boolean(sync.running),
+                style: sync.running ? { opacity: 0.7, cursor: 'not-allowed' } : undefined
+              }, sync.running ? 'Sync in corso...' : 'Avvia sync adesso'),
+              sync.running ? e('div', { key: 'progress-wrap', style: { display: 'grid', gap: '8px' } }, [
+                e('div', {
+                  key: 'bar-bg',
+                  style: {
+                    width: '100%',
+                    height: '10px',
+                    background: '#efe6d4',
+                    borderRadius: '999px',
+                    overflow: 'hidden'
+                  }
+                }, e('div', {
+                  style: {
+                    width: progressPercent + '%',
+                    height: '100%',
+                    background: '#1f6f5f',
+                    transition: 'width 200ms ease'
+                  }
+                })),
+                e('p', { key: 'progress-text', style: { margin: 0 } },
+                  'Progresso: ' + progressPercent + '% (' + (sync.processed || 0) + '/' + (sync.scanned || 0) + ')'
+                ),
+                e('p', { key: 'progress-sub', style: { margin: 0 } },
+                  'Sincronizzati: ' + (sync.synced || 0) + ' | Saltati: ' + (sync.skipped || 0) + ' | Errori: ' + (sync.errorsCount || 0)
+                )
+              ]) : null,
+              message ? e('p', { key: 'message', style: { margin: 0 } }, message) : null
+            ]);
+          }
+
+          window.ReactDOM.createRoot(rootNode).render(e(SyncWidget));
+        })();
+      </script>
     </body>
   </html>`;
 }
@@ -495,12 +636,29 @@ app.get(['/', '/app'], (req, res) => {
       flashMessage,
       flashType,
       isSyncRunning,
-      syncStartedAt: syncRuntime.startedAt
+      syncStartedAt: syncRuntime.startedAt,
+      syncRuntime
     }));
   } catch (error) {
     console.error('[HTTP] GET / error:', error.message);
     res.status(500).send(`<h1>Error</h1><p>${error.message}</p>`);
   }
+});
+
+app.get('/app/state', (_req, res) => {
+  const state = stateStore.readState();
+  res.json({
+    state,
+    sync: {
+      running: isSyncRunning,
+      startedAt: syncRuntime.startedAt,
+      processed: Number(syncRuntime.processed || 0),
+      scanned: Number(syncRuntime.scanned || 0),
+      synced: Number(syncRuntime.synced || 0),
+      skipped: Number(syncRuntime.skipped || 0),
+      errorsCount: Number(syncRuntime.errorsCount || 0)
+    }
+  });
 });
 
 app.get('/auth/start', (req, res) => {
@@ -666,6 +824,16 @@ app.post('/app/sync', (_req, res) => {
   redirectWithMessage(res, 'success', 'Sync avviato in background. Puoi continuare a usare la dashboard.');
 });
 
+app.post('/app/sync/start', (_req, res) => {
+  const started = startSync('dashboard-react');
+  if (!started) {
+    res.status(409).json({ ok: false, error: 'Sync già in corso.' });
+    return;
+  }
+
+  res.status(202).json({ ok: true, message: 'Sync avviato in background.' });
+});
+
 // Global error handler middleware
 app.use((err, req, res, next) => {
   console.error('[ERROR] Unhandled error:', err.message);
@@ -678,7 +846,12 @@ app.use((err, req, res, next) => {
 let isSyncRunning = false;
 const syncRuntime = {
   startedAt: null,
-  trigger: null
+  trigger: null,
+  processed: 0,
+  scanned: 0,
+  synced: 0,
+  skipped: 0,
+  errorsCount: 0
 };
 
 function startSync(trigger) {
@@ -689,10 +862,23 @@ function startSync(trigger) {
   isSyncRunning = true;
   syncRuntime.startedAt = new Date().toISOString();
   syncRuntime.trigger = trigger;
+  syncRuntime.processed = 0;
+  syncRuntime.scanned = 0;
+  syncRuntime.synced = 0;
+  syncRuntime.skipped = 0;
+  syncRuntime.errorsCount = 0;
 
   setImmediate(async () => {
     try {
-      const report = await runCatalogSync();
+      const report = await runCatalogSync({
+        onProgress: progress => {
+          syncRuntime.processed = Number(progress.processed || 0);
+          syncRuntime.scanned = Number(progress.scanned || 0);
+          syncRuntime.synced = Number(progress.synced || 0);
+          syncRuntime.skipped = Number(progress.skipped || 0);
+          syncRuntime.errorsCount = Number(progress.errorsCount || 0);
+        }
+      });
       console.log('[SYNC] completed', {
         trigger,
         startedAt: report.startedAt,
@@ -705,6 +891,11 @@ function startSync(trigger) {
       isSyncRunning = false;
       syncRuntime.startedAt = null;
       syncRuntime.trigger = null;
+      syncRuntime.processed = 0;
+      syncRuntime.scanned = 0;
+      syncRuntime.synced = 0;
+      syncRuntime.skipped = 0;
+      syncRuntime.errorsCount = 0;
     }
   });
 
