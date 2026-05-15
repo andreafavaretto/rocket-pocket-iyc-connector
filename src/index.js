@@ -440,10 +440,15 @@ function requireApiKey(req, res, next) {
 }
 
 app.get(['/', '/app'], (req, res) => {
-  const state = stateStore.readState();
-  const flashMessage = typeof req.query.message === 'string' ? req.query.message : '';
-  const flashType = typeof req.query.type === 'string' ? req.query.type : 'info';
-  res.type('html').send(renderDashboard({ state, flashMessage, flashType }));
+  try {
+    const state = stateStore.readState();
+    const flashMessage = typeof req.query.message === 'string' ? req.query.message : '';
+    const flashType = typeof req.query.type === 'string' ? req.query.type : 'info';
+    res.type('html').send(renderDashboard({ state, flashMessage, flashType }));
+  } catch (error) {
+    console.error('[HTTP] GET / error:', error.message);
+    res.status(500).send(`<h1>Error</h1><p>${error.message}</p>`);
+  }
 });
 
 app.get('/auth/start', (req, res) => {
@@ -575,6 +580,15 @@ app.post('/app/sync', async (_req, res) => {
   }
 });
 
+// Global error handler middleware
+app.use((err, req, res, next) => {
+  console.error('[ERROR] Unhandled error:', err.message);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({ error: 'Internal Server Error', message: err.message });
+});
+
 let isSyncRunning = false;
 
 async function runScheduledSync() {
@@ -635,5 +649,16 @@ async function bootstrap() {
 
 bootstrap().catch(error => {
   console.error('[BOOT] Fatal error', error.message);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[UNHANDLED REJECTION]', reason);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('[UNCAUGHT EXCEPTION]', error.message);
   process.exit(1);
 });
