@@ -2,7 +2,7 @@
 
 client_id = "027d6da1114e6831f1e363f38af05c34"
 name = "iyc-catalog-connector\r"
-application_url = "https://localhost:8787"
+application_url = "https://rocket-pocket-iyc-connector-production.up.railway.app"
 embedded = false
 handle = "rocket-pocket-iyc-catalog-connector"
 
@@ -17,7 +17,7 @@ api_version = "2026-07"
 scopes = "read_products,write_products"
 
 [auth]
-redirect_urls = [ "https://localhost:8787/auth/callback" ]
+redirect_urls = [ "https://rocket-pocket-iyc-connector-production.up.railway.app/auth/callback" ]
 
 [pos]
 embedded = false
