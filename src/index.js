@@ -782,7 +782,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               <p>Stato attuale: <strong>${hasStoredInstallation ? 'autorizzato via OAuth' : 'non autorizzato via OAuth'}</strong>.</p>
               <p>${installation ? `Token OAuth aggiornato il ${escapeHtml(formatTimestamp(installation.updatedAt))}.` : 'Serve un passaggio OAuth per ottenere il token offline dello store.'}</p>
               <p>${hasStaticToken ? 'E presente anche un token statico nel file .env, ma il sync usera il token OAuth salvato appena disponibile.' : 'Nessun token statico configurato nel file .env.'}</p>
-              <form method="get" action="/auth/start" target="_top">
+              <form method="get" action="/auth/start" target="_top" id="shopify-connect-form">
                 <button type="submit" class="${hasStoredInstallation ? 'secondary' : ''}">${hasStoredInstallation ? 'Riconnetti Shopify' : 'Connetti Shopify'}</button>
               </form>
             </article>
@@ -893,7 +893,22 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           const drawerTitle = document.getElementById('drawer-title');
           const drawerBody = document.getElementById('drawer-body');
           const drawerClose = document.getElementById('drawer-close');
+          const connectForm = document.getElementById('shopify-connect-form');
           const products = productsNode ? JSON.parse(productsNode.textContent || '[]') : [];
+
+          if (connectForm) {
+            connectForm.addEventListener('submit', function (event) {
+              const targetUrl = connectForm.getAttribute('action') || '/auth/start';
+              if (window.top && window.top !== window) {
+                event.preventDefault();
+                try {
+                  window.top.location.href = targetUrl;
+                } catch (_error) {
+                  window.location.href = targetUrl;
+                }
+              }
+            });
+          }
 
           function openDrawer(product) {
             if (!product || !drawer || !backdrop || !drawerTitle || !drawerBody) {
