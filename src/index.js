@@ -1177,11 +1177,117 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           const liveFallbackNode = document.getElementById('sync-live-fallback');
           const fallbackNode = document.getElementById('sync-fallback-root');
           const bootstrapNode = document.getElementById('dashboard-bootstrap');
-          if (!rootNode || !bootstrapNode || !window.React || !window.ReactDOM) {
+          if (!bootstrapNode) {
             return;
           }
 
           const bootstrap = JSON.parse(bootstrapNode.textContent || '{}');
+
+          function escapeHtml(value) {
+            return String(value || '')
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+          }
+
+          function renderFallbackSync(nextSync) {
+            if (!liveFallbackNode) {
+              return;
+            }
+
+            const sync = nextSync || {};
+            if (!sync.running) {
+              liveFallbackNode.className = '';
+              liveFallbackNode.innerHTML = '';
+              return;
+            }
+
+            const scanned = Number(sync.scanned || 0);
+            const processed = Number(sync.processed || 0);
+            const progressPercent = scanned > 0
+              ? Math.min(100, Math.round((processed / scanned) * 100))
+              : 0;
+            const currentProduct = sync.currentProduct || null;
+            const recentProducts = Array.isArray(sync.recentProducts) ? sync.recentProducts : [];
+            const previousProduct = recentProducts.length ? recentProducts[0] : null;
+
+            const currentBlock = currentProduct
+              ? [
+                  '<div class="sync-current-row">',
+                  currentProduct.imageUrl
+                    ? '<img class="sync-current-thumb" src="' + escapeHtml(currentProduct.imageUrl) + '" alt="' + escapeHtml(currentProduct.title || 'Prodotto in sync') + '" />'
+                    : '<div class="sync-current-thumb" style="display:grid;place-items:center;color:#8f8f99;font-size:10px;">N/A</div>',
+                  '<div style="flex:1;">',
+                  '<p class="sync-current-text">Sincronizzo ' + escapeHtml(currentProduct.title || 'prodotto') + '</p>',
+                  '<p style="margin:4px 0 0;font-size:11px;color:#9a9aa5;">' + escapeHtml((currentProduct.index || 0) + '/' + (currentProduct.total || scanned || 0)) + '</p>',
+                  '</div>',
+                  '</div>'
+                ].join('')
+              : '';
+
+            const previousBlock = previousProduct
+              ? [
+                  '<div style="border-top:1px solid #d0cec4;margin:8px 0;"></div>',
+                  '<div class="sync-current-row" style="opacity:0.85;">',
+                  previousProduct.imageUrl
+                    ? '<img class="sync-current-thumb" src="' + escapeHtml(previousProduct.imageUrl) + '" alt="' + escapeHtml(previousProduct.title || 'Prodotto precedente') + '" />'
+                    : '<div class="sync-current-thumb" style="display:grid;place-items:center;color:#8f8f99;font-size:10px;">N/A</div>',
+                  '<div style="flex:1;">',
+                  '<p class="sync-current-text">✓ ' + escapeHtml(previousProduct.title || 'prodotto') + '</p>',
+                  '<p style="margin:4px 0 0;font-size:11px;color:#9a9aa5;">' + escapeHtml(previousProduct.handle ? ('Handle: ' + previousProduct.handle) : '-') + '</p>',
+                  '</div>',
+                  '</div>'
+                ].join('')
+              : '';
+
+            liveFallbackNode.className = 'sync-live-panel is-running';
+            liveFallbackNode.innerHTML = [
+              '<h2 class="sync-live-title-main">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</h2>',
+              currentBlock,
+              previousBlock,
+              '<div style="width:100%;height:10px;background:#e4e5e7;border-radius:999px;overflow:hidden;margin-top:' + (previousProduct ? '8px' : '0') + ';">',
+              '<div style="width:' + progressPercent + '%;height:100%;background:#008060;transition:width 200ms ease;"></div>',
+              '</div>',
+              '<div class="sync-live-meta">',
+              '<span>Progresso: ' + progressPercent + '%</span>',
+              '<span>Processati: ' + processed + '/' + scanned + '</span>',
+              '<span>Sincronizzati: ' + Number(sync.synced || 0) + '</span>',
+              '<span>Cambiati: ' + Number(sync.changed || 0) + '</span>',
+              '<span>Invariati: ' + Number(sync.unchanged || 0) + '</span>',
+              '<span>Errori: ' + Number(sync.errorsCount || 0) + '</span>',
+              '</div>'
+            ].join('');
+          }
+
+          function startFallbackPolling() {
+            const poll = async function () {
+              try {
+                const response = await fetch('/app/state', { cache: 'no-store' });
+                if (!response.ok) {
+                  return;
+                }
+                const payload = await response.json();
+                const nextSync = payload && payload.sync ? payload.sync : null;
+                if (!nextSync) {
+                  return;
+                }
+                renderFallbackSync(nextSync);
+              } catch (_error) {
+                // Ignore transient polling errors in fallback mode.
+              }
+            };
+
+            poll();
+            setInterval(poll, 2000);
+          }
+
+          if (!rootNode || !window.React || !window.ReactDOM) {
+            startFallbackPolling();
+            return;
+          }
+
           const e = window.React.createElement;
 
           function SyncWidget() {
@@ -1261,7 +1367,6 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 }
 
                 setMessage(payload.message || 'Sync avviato in background.');
-                refreshStatus();
               } catch (_error) {
                 setMessage('Errore di rete durante avvio sync.');
               }
@@ -1418,6 +1523,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             if (fallbackNode) {
               fallbackNode.style.display = '';
             }
+            startFallbackPolling();
           }
         })();
       </script>
@@ -1523,6 +1629,9 @@ app.get(['/', '/app'], (req, res) => {
 
 app.get('/app/state', (_req, res) => {
   const sendState = async () => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     await hydrateProductsFromShopifyIfNeeded();
     const state = stateStore.readState();
     res.json({
