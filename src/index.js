@@ -127,7 +127,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     ? sortedProducts
         .map((product, index) => `
           <tr class="product-row" tabindex="0" role="button" aria-label="Apri dettagli ${escapeHtml(product.title)}" data-product-index="${index}" data-search="${escapeHtml([product.title, product.handle, product.shopifyProductId, product.lastPrice, product.lastBoxPrice, product.lastCasePrice, product.sourceCurrency].join(' ').toLowerCase())}">
-            <td>${product.imageFileName ? `<img class="thumb" src="/images/${encodeURIComponent(product.imageFileName)}" alt="${escapeHtml(product.title)}" loading="lazy" />` : '<span class="empty-thumb">-</span>'}</td>
+            <td>${product.imageUrl ? `<img class="thumb" src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(product.title)}" loading="lazy" />` : '<span class="empty-thumb">-</span>'}</td>
             <td>${escapeHtml(product.title)}</td>
             <td><code>${escapeHtml(product.handle)}</code></td>
             <td>${escapeHtml(product.shopifyProductId)}</td>
