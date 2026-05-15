@@ -1190,66 +1190,48 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             const [sync, setSync] = window.React.useState(initialSync);
             const [lastSyncReport, setLastSyncReport] = window.React.useState(initialLastSync);
             const [message, setMessage] = window.React.useState('');
-            const [wasRunning, setWasRunning] = window.React.useState(Boolean(initialSync.running));
             const [showLastReport, setShowLastReport] = window.React.useState(Boolean(initialLastSync));
             const completedSyncRef = window.React.useRef(initialLastSync && initialLastSync.finishedAt ? initialLastSync.finishedAt : '');
-            const wasRunningRef = window.React.useRef(Boolean(initialSync.running));
 
-            const refreshStatus = window.React.useCallback(async function () {
-              try {
-                const response = await fetch('/app/state', { cache: 'no-store' });
-                if (!response.ok) {
-                  return;
-                }
+            window.React.useEffect(function () {
+              const poll = async () => {
+                try {
+                  const response = await fetch('/app/state', { cache: 'no-store' });
+                  if (!response.ok) return;
 
-                const payload = await response.json();
-                const nextSync = payload && payload.sync ? payload.sync : null;
-                if (!nextSync) {
-                  return;
-                }
+                  const payload = await response.json();
+                  const nextSync = payload && payload.sync ? payload.sync : null;
+                  if (!nextSync) return;
 
-                if (nextSync.running) {
-                  console.log('[POLL] sync running', {
-                    processed: nextSync.processed,
-                    scanned: nextSync.scanned,
-                    recentProducts: Array.isArray(nextSync.recentProducts) ? nextSync.recentProducts.length : 0,
-                    currentProduct: nextSync.currentProduct ? nextSync.currentProduct.title : null
-                  });
-                }
+                  if (nextSync.running) {
+                    console.log('[POLL] sync running', {
+                      processed: nextSync.processed,
+                      scanned: nextSync.scanned,
+                      recentProducts: Array.isArray(nextSync.recentProducts) ? nextSync.recentProducts.length : 0,
+                      currentProduct: nextSync.currentProduct ? nextSync.currentProduct.title : null
+                    });
+                  }
 
-                const nextLastSync = payload && payload.state ? payload.state.lastSync : null;
+                  setSync(nextSync);
 
-                setSync(nextSync);
-
-                if (nextSync.running) {
-                  wasRunningRef.current = true;
-                  setWasRunning(true);
-                }
-
-                if (!nextSync.running && wasRunningRef.current) {
-                  wasRunningRef.current = false;
-                  setWasRunning(false);
-
-                  if (nextLastSync && nextLastSync.finishedAt) {
-                    setLastSyncReport(nextLastSync);
-
+                  const nextLastSync = payload && payload.state ? payload.state.lastSync : null;
+                  if (!nextSync.running && nextLastSync && nextLastSync.finishedAt) {
                     if (completedSyncRef.current !== nextLastSync.finishedAt) {
                       completedSyncRef.current = nextLastSync.finishedAt;
+                      setLastSyncReport(nextLastSync);
                       setShowLastReport(true);
                       setMessage('Sync completato. Dati aggiornati.');
                     }
                   }
+                } catch (_error) {
+                  console.error('[POLL] error', _error.message);
                 }
-              } catch (_error) {
-                console.error('[POLL] error', _error.message);
-              }
-            }, []);
+              };
 
-            window.React.useEffect(function () {
-              refreshStatus();
-              const timer = setInterval(refreshStatus, 2000);
+              poll();
+              const timer = setInterval(poll, 2000);
               return function () { clearInterval(timer); };
-            }, [refreshStatus]);
+            }, []);
 
             const progressPercent = sync.scanned > 0
               ? Math.min(100, Math.round((sync.processed / sync.scanned) * 100))
