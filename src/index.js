@@ -737,7 +737,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           border: 1px solid var(--line);
           background: #ffffff;
           border-radius: 10px;
-          padding: 12px;
+          padding: 16px 24px;
           display: grid;
           gap: 10px;
           position: relative;
