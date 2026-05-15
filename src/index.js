@@ -1242,6 +1242,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               }
             };
 
+            const previousProduct = recentProducts && recentProducts.length > 0 ? recentProducts[0] : null;
+
             const livePanel = sync.running
               ? e('div', { key: 'live-panel', className: 'sync-live-panel' }, [
                   e('p', { key: 'live-title', className: 'sync-live-title' },
@@ -1261,9 +1263,41 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                               className: 'sync-current-thumb',
                               style: { display: 'grid', placeItems: 'center', color: '#8f8f99', fontSize: '10px' }
                             }, 'N/A'),
-                        e('p', { key: 'current-text', className: 'sync-current-text' },
-                          'Sincronizzo ' + (currentProduct.title || 'prodotto') + '... ' + (currentProduct.index || 0) + '/' + (currentProduct.total || sync.scanned || 0)
-                        )
+                        e('div', { key: 'current-text-wrap', style: { flex: 1 } }, [
+                          e('p', { key: 'current-text', className: 'sync-current-text' },
+                            'Sincronizzo ' + (currentProduct.title || 'prodotto')
+                          ),
+                          e('p', { key: 'current-meta', style: { margin: '4px 0 0', fontSize: '11px', color: '#9a9aa5' } },
+                            (currentProduct.index || 0) + '/' + (currentProduct.total || sync.scanned || 0)
+                          )
+                        ])
+                      ])
+                    : null,
+                  previousProduct
+                    ? e('div', { key: 'divider', style: { borderTop: '1px solid #d0cec4', margin: '8px 0' } })
+                    : null,
+                  previousProduct
+                    ? e('div', { key: 'previous-row', className: 'sync-current-row', style: { opacity: 0.85 } }, [
+                        previousProduct.imageUrl
+                          ? e('img', {
+                              key: 'previous-thumb',
+                              className: 'sync-current-thumb',
+                              src: previousProduct.imageUrl,
+                              alt: previousProduct.title || 'Prodotto precedente'
+                            })
+                          : e('div', {
+                              key: 'previous-thumb-empty',
+                              className: 'sync-current-thumb',
+                              style: { display: 'grid', placeItems: 'center', color: '#8f8f99', fontSize: '10px' }
+                            }, 'N/A'),
+                        e('div', { key: 'previous-text-wrap', style: { flex: 1 } }, [
+                          e('p', { key: 'previous-text', className: 'sync-current-text' },
+                            '✓ ' + (previousProduct.title || 'prodotto')
+                          ),
+                          e('p', { key: 'previous-meta', style: { margin: '4px 0 0', fontSize: '11px', color: '#9a9aa5' } },
+                            previousProduct.handle ? 'Handle: ' + previousProduct.handle : '-'
+                          )
+                        ])
                       ])
                     : null,
                   e('div', {
@@ -1273,7 +1307,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                       height: '10px',
                       background: '#efe6d4',
                       borderRadius: '999px',
-                      overflow: 'hidden'
+                      overflow: 'hidden',
+                      marginTop: previousProduct ? '8px' : '0'
                     }
                   }, e('div', {
                     style: {
@@ -1290,12 +1325,11 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                     e('span', { key: 'meta-4' }, 'Invariati: ' + (sync.unchanged || 0)),
                     e('span', { key: 'meta-5' }, 'Errori: ' + (sync.errorsCount || 0))
                   ]),
-                  recentProducts.length
+                  recentProducts.length > 1
                     ? e('ul', { key: 'recent-list', className: 'sync-live-list' },
-                        recentProducts.slice(0, 8).map(function (item, index) {
+                        recentProducts.slice(1, 10).map(function (item, index) {
                           const name = item && item.title ? item.title : 'Prodotto';
-                          const status = item && item.status ? ' [' + item.status + ']' : '';
-                          return e('li', { key: 'recent-' + index }, name + status);
+                          return e('li', { key: 'recent-' + index }, '✓ ' + name);
                         })
                       )
                     : null
