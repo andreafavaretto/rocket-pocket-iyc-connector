@@ -86,6 +86,15 @@ function buildHandle(name) {
   return slug ? `iyc-${slug}` : null;
 }
 
+function formatMoney(symbol, amount) {
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  const normalizedSymbol = String(symbol || '').trim();
+  return normalizedSymbol ? `${normalizedSymbol}${amount.toFixed(2)}` : amount.toFixed(2);
+}
+
 function ensureProductPayload(product, markupPercent) {
   const handle = buildHandle(product.name);
   if (!handle) {
@@ -110,6 +119,39 @@ function ensureProductPayload(product, markupPercent) {
     : Number.isFinite(computedUnitAmount)
       ? computedUnitAmount
       : null;
+
+  const pricingByCurrency = Array.isArray(product.prices)
+    ? product.prices
+        .map((priceRow) => {
+          const parsedRowCasePrice = parseMoney(priceRow.casePrice);
+          if (!parsedRowCasePrice) {
+            return null;
+          }
+
+          const parsedRowUnitPrice = parseMoney(priceRow.unitPrice);
+          const computedRowUnitAmount = unitsPerCase ? parsedRowCasePrice.amount / unitsPerCase : null;
+          const originalUnitAmount = parsedRowUnitPrice
+            ? parsedRowUnitPrice.amount
+            : Number.isFinite(computedRowUnitAmount)
+              ? computedRowUnitAmount
+              : null;
+
+          const unitSymbol = parsedRowUnitPrice ? parsedRowUnitPrice.symbol : parsedRowCasePrice.symbol;
+          const markedUpCaseAmount = applyMarkup(parsedRowCasePrice.amount, markupPercent);
+          const markedUpUnitAmount = Number.isFinite(originalUnitAmount)
+            ? applyMarkup(originalUnitAmount, markupPercent)
+            : null;
+
+          return {
+            currency: priceRow.currency || '-',
+            caseOriginal: formatMoney(parsedRowCasePrice.symbol, parsedRowCasePrice.amount),
+            caseMarkedUp: formatMoney(parsedRowCasePrice.symbol, markedUpCaseAmount),
+            unitOriginal: formatMoney(unitSymbol, originalUnitAmount),
+            unitMarkedUp: formatMoney(unitSymbol, markedUpUnitAmount)
+          };
+        })
+        .filter(Boolean)
+    : [];
 
   const variants = [];
 
@@ -140,7 +182,9 @@ function ensureProductPayload(product, markupPercent) {
     variants,
     image: product.image || null,
     unitsPerCase,
-    sourceCurrency: selectedPrice.currency
+    sourceCurrency: selectedPrice.currency,
+    pricingByCurrency,
+    markupPercentApplied: markupPercent
   };
 }
 
@@ -223,7 +267,9 @@ async function upsertProduct(productPayload, previousState) {
     lastPrice: (caseVariant || productPayload.variants[0]).price,
     lastCasePrice: caseVariant ? caseVariant.price : null,
     lastBoxPrice: boxVariant ? boxVariant.price : null,
-    sourceCurrency: productPayload.sourceCurrency
+    sourceCurrency: productPayload.sourceCurrency,
+    pricingByCurrency: Array.isArray(productPayload.pricingByCurrency) ? productPayload.pricingByCurrency : [],
+    markupPercentApplied: Number(productPayload.markupPercentApplied || 0)
   };
 }
 

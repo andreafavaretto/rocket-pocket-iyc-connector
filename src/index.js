@@ -53,6 +53,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     lastBoxPrice: product.lastBoxPrice || '-',
     lastCasePrice: product.lastCasePrice || '-',
     sourceCurrency: product.sourceCurrency || '-',
+    pricingByCurrency: Array.isArray(product.pricingByCurrency) ? product.pricingByCurrency : [],
+    markupPercentApplied: Number.isFinite(Number(product.markupPercentApplied))
+      ? Number(product.markupPercentApplied)
+      : Number(markupPercent || 0),
     updatedAt: product.updatedAt || null
   }));
   const sortedProducts = [...products].sort((left, right) => String(left.title).localeCompare(String(right.title)));
@@ -540,6 +544,50 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           line-height: 1.5;
         }
 
+        .drawer-pricing-title {
+          margin: 2px 0 0;
+          color: #e4e4ea;
+          font-size: 12px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .drawer-pricing-wrap {
+          border: 1px solid var(--line);
+          border-radius: 16px;
+          overflow: hidden;
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .drawer-pricing-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 11px;
+        }
+
+        .drawer-pricing-table th,
+        .drawer-pricing-table td {
+          border-bottom: 1px solid var(--line);
+          padding: 9px 10px;
+          white-space: normal;
+        }
+
+        .drawer-pricing-table th {
+          font-size: 10px;
+          color: #9b9ba4;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+        }
+
+        .drawer-pricing-table tr:last-child td {
+          border-bottom: 0;
+        }
+
+        .drawer-pricing-empty {
+          color: #9a9aa5;
+          text-align: center;
+        }
+
         table {
           width: 100%;
           border-collapse: collapse;
@@ -759,6 +807,24 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               ? '<img class="drawer-image" src="' + product.imageUrl + '" alt="' + escapeClientHtml(product.title) + '" />'
               : '<div class="drawer-image" style="display:grid;place-items:center;color:#9a9aa5;">Nessuna immagine</div>';
 
+            const markupValue = Number.isFinite(Number(product.markupPercentApplied))
+              ? Number(product.markupPercentApplied)
+              : 0;
+
+            const pricingRows = Array.isArray(product.pricingByCurrency) && product.pricingByCurrency.length
+              ? product.pricingByCurrency.map(function (entry) {
+                  return [
+                    '<tr>',
+                    '<td>' + escapeClientHtml(entry.currency || '-') + '</td>',
+                    '<td>' + escapeClientHtml(entry.unitOriginal || '-') + '</td>',
+                    '<td>' + escapeClientHtml(entry.unitMarkedUp || '-') + '</td>',
+                    '<td>' + escapeClientHtml(entry.caseOriginal || '-') + '</td>',
+                    '<td>' + escapeClientHtml(entry.caseMarkedUp || '-') + '</td>',
+                    '</tr>'
+                  ].join('');
+                }).join('')
+              : '<tr><td colspan="5" class="drawer-pricing-empty">Dettaglio valute disponibile dopo il prossimo sync.</td></tr>';
+
             drawerBody.innerHTML = [
               '<div class="drawer-hero">',
               imageMarkup,
@@ -769,6 +835,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               '<div class="drawer-card"><label>Prezzo Box</label><strong>' + escapeClientHtml(product.lastBoxPrice || '-') + '</strong></div>',
               '<div class="drawer-card"><label>Prezzo Case</label><strong>' + escapeClientHtml(product.lastCasePrice || '-') + '</strong></div>',
               '<div class="drawer-card"><label>Valuta</label><strong>' + escapeClientHtml(product.sourceCurrency || '-') + '</strong></div>',
+              '<div class="drawer-card"><label>Rincaro applicato</label><strong>' + escapeClientHtml(markupValue + '%') + '</strong></div>',
+              '</div>',
+              '<p class="drawer-pricing-title">Prezzi per valuta (originale vs con rincaro ' + escapeClientHtml(markupValue + '%') + ')</p>',
+              '<div class="drawer-pricing-wrap">',
+              '<table class="drawer-pricing-table">',
+              '<thead><tr><th>Valuta</th><th>Box orig.</th><th>Box con rincaro</th><th>Case orig.</th><th>Case con rincaro</th></tr></thead>',
+              '<tbody>',
+              pricingRows,
+              '</tbody>',
+              '</table>',
               '</div>',
               '<div class="drawer-card">',
               '<label>Ultimo aggiornamento</label>',
