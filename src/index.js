@@ -311,6 +311,21 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           padding: 24px;
         }
 
+        .ops-widget {
+          display: grid;
+          gap: 18px;
+        }
+
+        .ops-section {
+          display: grid;
+          gap: 10px;
+        }
+
+        .ops-section + .ops-section {
+          border-top: 1px solid var(--line);
+          padding-top: 18px;
+        }
+
         .card h2 {
           margin: 0 0 14px;
           font-size: 15px;
@@ -777,39 +792,41 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         <section class="grid">
           <div class="stack">
-            <article class="panel card">
-              <h2>Autorizzazione Shopify</h2>
-              <p>Stato attuale: <strong>${hasStoredInstallation ? 'autorizzato via OAuth' : 'non autorizzato via OAuth'}</strong>.</p>
-              <p>${installation ? `Token OAuth aggiornato il ${escapeHtml(formatTimestamp(installation.updatedAt))}.` : 'Serve un passaggio OAuth per ottenere il token offline dello store.'}</p>
-              <p>${hasStaticToken ? 'E presente anche un token statico nel file .env, ma il sync usera il token OAuth salvato appena disponibile.' : 'Nessun token statico configurato nel file .env.'}</p>
-              <form method="get" action="/auth/start" target="_top" id="shopify-connect-form">
-                <button type="submit" class="${hasStoredInstallation ? 'secondary' : ''}">${hasStoredInstallation ? 'Riconnetti Shopify' : 'Connetti Shopify'}</button>
-              </form>
-            </article>
-
-            <article class="panel card">
-              <h2>Marginalità</h2>
-              <form method="post" action="/app/settings/markup-percent">
-                <label for="markupPercent">Percentuale da applicare ai prezzi importati</label>
-                <input id="markupPercent" name="markupPercent" type="number" min="0" step="0.01" value="${escapeHtml(markupPercent)}" />
-                <button type="submit">Salva marginalità</button>
-              </form>
-            </article>
-
-            <article class="panel card">
-              <h2>Sync manuale</h2>
-              <p>Usa questo comando per forzare subito il caricamento del catalogo dal Google Sheet e aggiornare i prodotti su Shopify.</p>
-              <div id="sync-fallback-root">
-                <form method="post" action="/app/sync">
-                  <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+            <article class="panel card ops-widget">
+              <section class="ops-section">
+                <h2>Autorizzazione Shopify</h2>
+                <p>Stato attuale: <strong>${hasStoredInstallation ? 'autorizzato via OAuth' : 'non autorizzato via OAuth'}</strong>.</p>
+                <p>${installation ? `Token OAuth aggiornato il ${escapeHtml(formatTimestamp(installation.updatedAt))}.` : 'Serve un passaggio OAuth per ottenere il token offline dello store.'}</p>
+                <p>${hasStaticToken ? 'E presente anche un token statico nel file .env, ma il sync usera il token OAuth salvato appena disponibile.' : 'Nessun token statico configurato nel file .env.'}</p>
+                <form method="get" action="/auth/start" target="_top" id="shopify-connect-form">
+                  <button type="submit" class="${hasStoredInstallation ? 'secondary' : ''}">${hasStoredInstallation ? 'Riconnetti Shopify' : 'Connetti Shopify'}</button>
                 </form>
-              </div>
-              <div id="sync-react-root"></div>
-              <noscript>
-                <form method="post" action="/app/sync">
-                  <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+              </section>
+
+              <section class="ops-section">
+                <h2>Marginalità</h2>
+                <form method="post" action="/app/settings/markup-percent">
+                  <label for="markupPercent">Percentuale da applicare ai prezzi importati</label>
+                  <input id="markupPercent" name="markupPercent" type="number" min="0" step="0.01" value="${escapeHtml(markupPercent)}" />
+                  <button type="submit">Salva marginalità</button>
                 </form>
-              </noscript>
+              </section>
+
+              <section class="ops-section">
+                <h2>Sync manuale</h2>
+                <p>Usa questo comando per forzare subito il caricamento del catalogo dal Google Sheet e aggiornare i prodotti su Shopify.</p>
+                <div id="sync-fallback-root">
+                  <form method="post" action="/app/sync">
+                    <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+                  </form>
+                </div>
+                <div id="sync-react-root"></div>
+                <noscript>
+                  <form method="post" action="/app/sync">
+                    <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+                  </form>
+                </noscript>
+              </section>
             </article>
 
             <article class="panel card">
