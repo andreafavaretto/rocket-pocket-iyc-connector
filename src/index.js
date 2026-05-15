@@ -653,6 +653,11 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             <article class="panel card">
               <h2>Sync manuale</h2>
               <p>Usa questo comando per forzare subito il caricamento del catalogo dal Google Sheet e aggiornare i prodotti su Shopify.</p>
+              <div id="sync-fallback-root">
+                <form method="post" action="/app/sync">
+                  <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+                </form>
+              </div>
               <div id="sync-react-root"></div>
               <noscript>
                 <form method="post" action="/app/sync">
@@ -720,6 +725,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <script id="dashboard-bootstrap" type="application/json">${serializeForScript(initialDashboardPayload)}</script>
       <script id="dashboard-products" type="application/json">${serializeForScript(dashboardProductsPayload)}</script>
       <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+      <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
       <script>
         (function () {
           const escapeClientHtml = function (value) {
@@ -857,6 +863,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <script>
         (function () {
           const rootNode = document.getElementById('sync-react-root');
+          const fallbackNode = document.getElementById('sync-fallback-root');
           const bootstrapNode = document.getElementById('dashboard-bootstrap');
           if (!rootNode || !bootstrapNode || !window.React || !window.ReactDOM) {
             return;
@@ -964,7 +971,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             ]);
           }
 
-          window.ReactDOM.createRoot(rootNode).render(e(SyncWidget));
+          try {
+            window.ReactDOM.createRoot(rootNode).render(e(SyncWidget));
+            if (fallbackNode) {
+              fallbackNode.style.display = 'none';
+            }
+          } catch (_error) {
+            if (fallbackNode) {
+              fallbackNode.style.display = '';
+            }
+          }
         })();
       </script>
     </body>
