@@ -197,8 +197,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     ? `
       <div class="sync-live-panel is-running" id="sync-live-fallback">
         <h2 class="sync-live-title-main">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</h2>
-        <div style="width:100%;height:10px;background:#e4e5e7;border-radius:999px;overflow:hidden;">
-          <div style="width:${serverProgressPercent}%;height:100%;background:#008060;transition:width 200ms ease;"></div>
+        <div class="sync-progress-track">
+          <div class="sync-progress-fill" style="width:${serverProgressPercent}%;"></div>
         </div>
         <div class="sync-live-meta">
           <span>Progresso: ${serverProgressPercent}%</span>
@@ -848,58 +848,108 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           color: var(--ink);
         }
 
-        @keyframes sync-border-rotate {
+        .sync-progress-track {
+          width: 100%;
+          height: 10px;
+          background: linear-gradient(180deg, #daf8e8 0%, #c7f0db 100%);
+          border: 1px solid rgba(22, 126, 73, 0.22);
+          border-radius: 999px;
+          overflow: hidden;
+          box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+        }
+
+        .sync-progress-fill {
+          height: 100%;
+          border-radius: inherit;
+          background:
+            linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, rgba(211, 255, 228, 0.7) 55%, rgba(0, 0, 0, 0) 100%),
+            linear-gradient(90deg, #18a86d 0%, #2ad780 50%, #16b567 100%);
+          background-size: 180px 100%, 100% 100%;
+          background-position: -180px 0, 0 0;
+          transition: width 260ms ease;
+          animation: sync-progress-shine 1.9s linear infinite;
+          box-shadow: 0 0 12px rgba(34, 197, 94, 0.42);
+        }
+
+        @keyframes sync-progress-shine {
           to {
-            transform: rotate(1turn);
+            background-position: 180px 0, 0 0;
+          }
+        }
+
+        @keyframes sync-neon-scan {
+          0% {
+            transform: translateX(-130%);
+            opacity: 0;
+          }
+
+          14% {
+            opacity: 0.95;
+          }
+
+          52% {
+            opacity: 0.75;
+          }
+
+          100% {
+            transform: translateX(300%);
+            opacity: 0;
+          }
+        }
+
+        @keyframes sync-neon-breathe {
+          0%,
+          100% {
+            box-shadow:
+              0 0 0 1px rgba(22, 126, 73, 0.22),
+              0 0 16px rgba(34, 197, 94, 0.12),
+              inset 0 0 12px rgba(34, 197, 94, 0.08);
+          }
+
+          50% {
+            box-shadow:
+              0 0 0 1px rgba(22, 126, 73, 0.34),
+              0 0 22px rgba(34, 197, 94, 0.22),
+              inset 0 0 18px rgba(34, 197, 94, 0.14);
           }
         }
 
         .sync-live-panel.is-running {
-          border-color: rgba(31, 111, 95, 0.35);
+          border-color: rgba(22, 126, 73, 0.38);
+          background:
+            linear-gradient(180deg, rgba(242, 255, 248, 0.96) 0%, rgba(231, 252, 240, 0.96) 100%),
+            #ffffff;
+          animation: sync-neon-breathe 2.3s ease-in-out infinite;
         }
 
         .sync-live-panel.is-running::before {
           content: '';
           position: absolute;
-          inset: -1px;
-          border-radius: inherit;
-          padding: 1px;
-          background: conic-gradient(
-            from 0deg,
-            rgba(31, 111, 95, 0) 0deg,
-            rgba(31, 111, 95, 0) 275deg,
-            rgba(31, 111, 95, 0.35) 304deg,
-            rgba(31, 111, 95, 0.95) 328deg,
-            rgba(31, 111, 95, 0) 360deg
-          );
-          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
+          left: 14px;
+          top: -1px;
+          width: 32%;
+          height: 2px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, rgba(134, 255, 190, 0) 0%, rgba(134, 255, 190, 0.92) 50%, rgba(134, 255, 190, 0) 100%);
+          filter: blur(0.3px);
+          box-shadow: 0 0 12px rgba(94, 255, 165, 0.95);
           pointer-events: none;
-          animation: sync-border-rotate 1.8s linear infinite;
+          z-index: 2;
+          animation: sync-neon-scan 2.5s linear infinite;
         }
 
         .sync-live-panel.is-running::after {
           content: '';
           position: absolute;
-          inset: -2px;
+          inset: -1px;
           border-radius: inherit;
-          padding: 1px;
-          background: conic-gradient(
-            from 0deg,
-            rgba(31, 111, 95, 0) 0deg,
-            rgba(31, 111, 95, 0) 275deg,
-            rgba(31, 111, 95, 0.22) 304deg,
-            rgba(31, 111, 95, 0.6) 328deg,
-            rgba(31, 111, 95, 0) 360deg
-          );
-          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
+          border: 1px solid rgba(94, 255, 165, 0.24);
           pointer-events: none;
-          filter: blur(2px);
-          opacity: 0.95;
-          animation: sync-border-rotate 1.8s linear infinite;
+          box-shadow:
+            0 0 18px rgba(94, 255, 165, 0.2),
+            inset 0 0 18px rgba(94, 255, 165, 0.08);
+          opacity: 0.9;
+          z-index: 1;
         }
 
         @media (max-width: 960px) {
@@ -1314,8 +1364,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               '<h2 class="sync-live-title-main">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</h2>',
               currentBlock,
               previousBlock,
-              '<div style="width:100%;height:10px;background:#e4e5e7;border-radius:999px;overflow:hidden;margin-top:' + (previousProduct ? '8px' : '0') + ';">',
-              '<div style="width:' + progressPercent + '%;height:100%;background:#008060;transition:width 200ms ease;"></div>',
+              '<div class="sync-progress-track" style="margin-top:' + (previousProduct ? '8px' : '0') + ';">',
+              '<div class="sync-progress-fill" style="width:' + progressPercent + '%;"></div>',
               '</div>',
               '<div class="sync-live-meta">',
               '<span>Progresso: ' + progressPercent + '%</span>',
@@ -1499,20 +1549,12 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                     : null,
                   e('div', {
                     key: 'bar-bg',
-                    style: {
-                      width: '100%',
-                      height: '10px',
-                      background: '#efe6d4',
-                      borderRadius: '999px',
-                      overflow: 'hidden',
-                      marginTop: previousProduct ? '8px' : '0'
-                    }
+                    className: 'sync-progress-track',
+                    style: { marginTop: previousProduct ? '8px' : '0' }
                   }, e('div', {
+                    className: 'sync-progress-fill',
                     style: {
-                      width: progressPercent + '%',
-                      height: '100%',
-                      background: '#1f6f5f',
-                      transition: 'width 200ms ease'
+                      width: progressPercent + '%'
                     }
                   })),
                   e('div', { key: 'live-meta', className: 'sync-live-meta' }, [
