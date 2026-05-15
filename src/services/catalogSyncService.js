@@ -19,13 +19,66 @@ function normalizeVariantKey(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function normalizeCurrency(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+}
+
+function currencyAliases(value) {
+  const normalized = normalizeCurrency(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const aliases = new Set([normalized]);
+
+  if (normalized.includes('EUR') || normalized.includes('€')) {
+    aliases.add('EUR');
+    aliases.add('EUR (€)');
+    aliases.add('€');
+  }
+
+  if (normalized.includes('GBP') || normalized.includes('£')) {
+    aliases.add('GBP');
+    aliases.add('GBP (£)');
+    aliases.add('£');
+  }
+
+  if (normalized.includes('USD') || normalized.includes('$')) {
+    aliases.add('USD');
+    aliases.add('USD ($)');
+    aliases.add('$');
+  }
+
+  return Array.from(aliases);
+}
+
 function pickPriceForCurrency(prices, preferredCurrency) {
   if (!Array.isArray(prices) || !prices.length) {
     return null;
   }
 
-  const exact = prices.find(price => price.currency === preferredCurrency);
-  return exact || prices[0];
+  const preferredAliases = currencyAliases(preferredCurrency);
+  const normalizedRows = prices.map(price => ({
+    ...price,
+    normalizedCurrency: normalizeCurrency(price.currency)
+  }));
+
+  const exact = normalizedRows.find(price => preferredAliases.includes(price.normalizedCurrency));
+  if (exact) {
+    return exact;
+  }
+
+  const containsAlias = normalizedRows.find(price =>
+    preferredAliases.some(alias => price.normalizedCurrency.includes(alias))
+  );
+  if (containsAlias) {
+    return containsAlias;
+  }
+
+  return prices[0];
 }
 
 function buildHandle(name) {

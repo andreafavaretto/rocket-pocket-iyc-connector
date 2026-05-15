@@ -45,7 +45,7 @@ module.exports = {
     catalogTag: process.env.SHOPIFY_PRODUCT_TAG || 'iyc-catalog'
   },
   pricing: {
-    defaultCurrency: process.env.DEFAULT_PRICE_CURRENCY || 'GBP (£)',
+    defaultCurrency: process.env.DEFAULT_PRICE_CURRENCY || 'EUR (€)',
     defaultMarkupPercent: Number(process.env.DEFAULT_MARKUP_PERCENT || 0)
   },
   sync: {
