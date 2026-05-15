@@ -1399,25 +1399,51 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           }
 
           function startFallbackPolling() {
-            const poll = async function () {
+            let socket = null;
+            let stream = null;
+            let timer = null;
+            let stopped = false;
+            let currentPollDelay = 2000;
+
+            const scheduleNextPoll = function () {
+              if (stopped) {
+                return;
+              }
+              timer = setTimeout(poll, currentPollDelay);
+            };
+
+            const closeLiveConnections = function () {
+              if (socket) {
+                socket.disconnect();
+                socket = null;
+              }
+              if (stream) {
+                stream.close();
+                stream = null;
+              }
+            };
+
+            const handleStreamEvent = function (event) {
               try {
-                const payload = await fetchSyncSnapshot();
+                const payload = JSON.parse(event.data || '{}');
                 const nextSync = payload && payload.sync ? payload.sync : null;
                 if (!nextSync) {
                   return;
                 }
                 renderFallbackSync(nextSync);
+                if (!nextSync.running) {
+                  closeLiveConnections();
+                }
               } catch (_error) {
-                // Ignore transient polling errors in fallback mode.
+                // Ignore malformed stream payloads.
               }
             };
 
-            poll();
-            const timer = setInterval(poll, 2000);
-            let socket = null;
-            let stream = null;
+            const ensureSocketConnection = function () {
+              if (socket || typeof window.io !== 'function') {
+                return Boolean(socket);
+              }
 
-            if (typeof window.io === 'function') {
               try {
                 socket = window.io({
                   path: '/socket.io',
@@ -1425,42 +1451,81 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 });
                 socket.on('sync:snapshot', function (payload) {
                   const nextSync = payload && payload.sync ? payload.sync : null;
-                  if (nextSync) {
-                    renderFallbackSync(nextSync);
+                  if (!nextSync) {
+                    return;
+                  }
+                  renderFallbackSync(nextSync);
+                  if (!nextSync.running) {
+                    closeLiveConnections();
                   }
                 });
+                return true;
               } catch (_error) {
                 socket = null;
+                return false;
               }
-            }
+            };
 
-            if (typeof window.EventSource === 'function') {
+            const ensureStreamConnection = function () {
+              if (stream || typeof window.EventSource !== 'function') {
+                return Boolean(stream);
+              }
+
               try {
                 stream = new window.EventSource('/app/sync/stream');
-                stream.addEventListener('sync', function (event) {
-                  try {
-                    const payload = JSON.parse(event.data || '{}');
-                    const nextSync = payload && payload.sync ? payload.sync : null;
-                    if (nextSync) {
-                      renderFallbackSync(nextSync);
-                    }
-                  } catch (_error) {
-                    // Ignore malformed stream payloads.
-                  }
-                });
+                stream.addEventListener('sync', handleStreamEvent);
+                return true;
               } catch (_error) {
                 stream = null;
+                return false;
               }
-            }
+            };
+
+            const syncLiveTransport = function (isRunning) {
+              currentPollDelay = isRunning ? 350 : 2000;
+
+              if (!isRunning) {
+                closeLiveConnections();
+                return;
+              }
+
+              const hasSocket = ensureSocketConnection();
+              if (hasSocket) {
+                if (stream) {
+                  stream.close();
+                  stream = null;
+                }
+                return;
+              }
+
+              ensureStreamConnection();
+            };
+
+            const poll = async function () {
+              try {
+                const payload = await fetchSyncSnapshot();
+                const nextSync = payload && payload.sync ? payload.sync : null;
+                if (!nextSync) {
+                  scheduleNextPoll();
+                  return;
+                }
+                renderFallbackSync(nextSync);
+                syncLiveTransport(Boolean(nextSync.running));
+              } catch (_error) {
+                // Ignore transient polling errors in fallback mode.
+              } finally {
+                scheduleNextPoll();
+              }
+            };
+
+            poll();
 
             return function () {
-              clearInterval(timer);
-              if (socket) {
-                socket.disconnect();
+              stopped = true;
+              if (timer) {
+                clearTimeout(timer);
               }
-              if (stream) {
-                stream.close();
-              }
+              closeLiveConnections();
             };
           }
 
@@ -1481,6 +1546,90 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             const completedSyncRef = window.React.useRef(initialLastSync && initialLastSync.finishedAt ? initialLastSync.finishedAt : '');
 
             window.React.useEffect(function () {
+              let socket = null;
+              let stream = null;
+              let timer = null;
+              let stopped = false;
+              let currentPollDelay = 2000;
+
+              const scheduleNextPoll = function () {
+                if (stopped) {
+                  return;
+                }
+                timer = setTimeout(poll, currentPollDelay);
+              };
+
+              const closeLiveConnections = function () {
+                if (socket) {
+                  socket.disconnect();
+                  socket = null;
+                }
+                if (stream) {
+                  stream.close();
+                  stream = null;
+                }
+              };
+
+              const ensureSocketConnection = function (onSnapshot) {
+                if (socket || typeof window.io !== 'function') {
+                  return Boolean(socket);
+                }
+
+                try {
+                  socket = window.io({
+                    path: '/socket.io',
+                    transports: ['websocket', 'polling']
+                  });
+                  socket.on('sync:snapshot', onSnapshot);
+                  return true;
+                } catch (_error) {
+                  socket = null;
+                  return false;
+                }
+              };
+
+              const ensureStreamConnection = function (onSnapshot) {
+                if (stream || typeof window.EventSource !== 'function') {
+                  return Boolean(stream);
+                }
+
+                try {
+                  stream = new window.EventSource('/app/sync/stream');
+                  stream.addEventListener('sync', function (event) {
+                    try {
+                      const payload = JSON.parse(event.data || '{}');
+                      onSnapshot(payload);
+                    } catch (_error) {
+                      // Ignore malformed stream payloads.
+                    }
+                  });
+                  return true;
+                } catch (_error) {
+                  stream = null;
+                  return false;
+                }
+              };
+
+              const syncLiveTransport = function (isRunning, onSnapshot) {
+                currentPollDelay = isRunning ? 350 : 2000;
+
+                if (!isRunning) {
+                  closeLiveConnections();
+                  return;
+                }
+
+                const hasSocket = ensureSocketConnection(onSnapshot);
+                if (hasSocket) {
+                  if (stream) {
+                    stream.close();
+                    stream = null;
+                  }
+                  return;
+                }
+
+                ensureStreamConnection(onSnapshot);
+              };
+
               const applySyncSnapshot = function (payload) {
                 const nextSync = payload && payload.sync ? payload.sync : null;
                 if (!nextSync) {
@@ -1488,6 +1637,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 }
 
                 setSync(nextSync);
+                syncLiveTransport(Boolean(nextSync.running), applySyncSnapshot);
 
                 const nextLastSync = payload && payload.lastSync ? payload.lastSync : null;
                 if (!nextSync.running && nextLastSync && nextLastSync.finishedAt) {
@@ -1506,43 +1656,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                   applySyncSnapshot(payload);
                 } catch (_error) {
                   console.error('[POLL] error', _error.message);
+                } finally {
+                  scheduleNextPoll();
                 }
               };
 
               poll();
-              const timer = setInterval(poll, 2000);
 
-              let socket = null;
-              let stream = null;
-              if (typeof window.io === 'function') {
-                try {
-                  socket = window.io({
-                    path: '/socket.io',
-                    transports: ['websocket', 'polling']
-                  });
-                  socket.on('sync:snapshot', function (payload) {
-                    applySyncSnapshot(payload);
-                  });
-                } catch (_error) {
-                  socket = null;
-                }
-              }
-
-              if (typeof window.EventSource === 'function') {
-                try {
-                  stream = new window.EventSource('/app/sync/stream');
-                  stream.addEventListener('sync', function (event) {
-                    try {
-                      const payload = JSON.parse(event.data || '{}');
-                      applySyncSnapshot(payload);
-                    } catch (_error) {
-                      // Ignore malformed stream payloads.
-                    }
-                  });
-                } catch (_error) {
-                  stream = null;
-                }
-              }
+              syncLiveTransport(Boolean(initialSync.running), applySyncSnapshot);
 
               const onWake = function () {
                 if (!document.hidden) {
@@ -1554,15 +1675,13 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               window.addEventListener('focus', onWake);
 
               return function () {
-                clearInterval(timer);
+                stopped = true;
+                if (timer) {
+                  clearTimeout(timer);
+                }
                 document.removeEventListener('visibilitychange', onWake);
                 window.removeEventListener('focus', onWake);
-                if (socket) {
-                  socket.disconnect();
-                }
-                if (stream) {
-                  stream.close();
-                }
+                closeLiveConnections();
               };
             }, []);
 
@@ -1582,6 +1701,13 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
             const onStart = async function () {
               setMessage('Avvio sync...');
+              setSync(function (previous) {
+                return {
+                  ...previous,
+                  running: true,
+                  startedAt: new Date().toISOString()
+                };
+              });
               try {
                 const response = await fetch('/app/sync/start', {
                   method: 'POST',
@@ -1590,12 +1716,24 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 const payload = await response.json();
                 if (!response.ok) {
                   setMessage(payload.error || 'Impossibile avviare il sync.');
+                  setSync(function (previous) {
+                    return {
+                      ...previous,
+                      running: false
+                    };
+                  });
                   return;
                 }
 
                 setMessage(payload.message || 'Sync avviato in background.');
               } catch (_error) {
                 setMessage('Errore di rete durante avvio sync.');
+                setSync(function (previous) {
+                  return {
+                    ...previous,
+                    running: false
+                  };
+                });
               }
             };
 
