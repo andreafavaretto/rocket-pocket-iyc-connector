@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -1378,14 +1379,21 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             ].join('');
           }
 
+          async function fetchSyncSnapshot() {
+            const response = await fetch('/app/sync-state?ts=' + Date.now(), {
+              cache: 'no-store',
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            if (!response.ok) {
+              throw new Error('Sync state non disponibile');
+            }
+            return response.json();
+          }
+
           function startFallbackPolling() {
             const poll = async function () {
               try {
-                const response = await fetch('/app/state', { cache: 'no-store' });
-                if (!response.ok) {
-                  return;
-                }
-                const payload = await response.json();
+                const payload = await fetchSyncSnapshot();
                 const nextSync = payload && payload.sync ? payload.sync : null;
                 if (!nextSync) {
                   return;
@@ -1397,7 +1405,34 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             };
 
             poll();
-            setInterval(poll, 2000);
+            const timer = setInterval(poll, 2000);
+            let stream = null;
+
+            if (typeof window.EventSource === 'function') {
+              try {
+                stream = new window.EventSource('/app/sync/stream');
+                stream.addEventListener('sync', function (event) {
+                  try {
+                    const payload = JSON.parse(event.data || '{}');
+                    const nextSync = payload && payload.sync ? payload.sync : null;
+                    if (nextSync) {
+                      renderFallbackSync(nextSync);
+                    }
+                  } catch (_error) {
+                    // Ignore malformed stream payloads.
+                  }
+                });
+              } catch (_error) {
+                stream = null;
+              }
+            }
+
+            return function () {
+              clearInterval(timer);
+              if (stream) {
+                stream.close();
+              }
+            };
           }
 
           if (!rootNode || !window.React || !window.ReactDOM) {
@@ -1417,35 +1452,29 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             const completedSyncRef = window.React.useRef(initialLastSync && initialLastSync.finishedAt ? initialLastSync.finishedAt : '');
 
             window.React.useEffect(function () {
+              const applySyncSnapshot = function (payload) {
+                const nextSync = payload && payload.sync ? payload.sync : null;
+                if (!nextSync) {
+                  return;
+                }
+
+                setSync(nextSync);
+
+                const nextLastSync = payload && payload.lastSync ? payload.lastSync : null;
+                if (!nextSync.running && nextLastSync && nextLastSync.finishedAt) {
+                  if (completedSyncRef.current !== nextLastSync.finishedAt) {
+                    completedSyncRef.current = nextLastSync.finishedAt;
+                    setLastSyncReport(nextLastSync);
+                    setShowLastReport(true);
+                    setMessage('Sync completato. Dati aggiornati.');
+                  }
+                }
+              };
+
               const poll = async () => {
                 try {
-                  const response = await fetch('/app/state', { cache: 'no-store' });
-                  if (!response.ok) return;
-
-                  const payload = await response.json();
-                  const nextSync = payload && payload.sync ? payload.sync : null;
-                  if (!nextSync) return;
-
-                  if (nextSync.running) {
-                    console.log('[POLL] sync running', {
-                      processed: nextSync.processed,
-                      scanned: nextSync.scanned,
-                      recentProducts: Array.isArray(nextSync.recentProducts) ? nextSync.recentProducts.length : 0,
-                      currentProduct: nextSync.currentProduct ? nextSync.currentProduct.title : null
-                    });
-                  }
-
-                  setSync(nextSync);
-
-                  const nextLastSync = payload && payload.state ? payload.state.lastSync : null;
-                  if (!nextSync.running && nextLastSync && nextLastSync.finishedAt) {
-                    if (completedSyncRef.current !== nextLastSync.finishedAt) {
-                      completedSyncRef.current = nextLastSync.finishedAt;
-                      setLastSyncReport(nextLastSync);
-                      setShowLastReport(true);
-                      setMessage('Sync completato. Dati aggiornati.');
-                    }
-                  }
+                  const payload = await fetchSyncSnapshot();
+                  applySyncSnapshot(payload);
                 } catch (_error) {
                   console.error('[POLL] error', _error.message);
                 }
@@ -1453,7 +1482,41 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
               poll();
               const timer = setInterval(poll, 2000);
-              return function () { clearInterval(timer); };
+
+              let stream = null;
+              if (typeof window.EventSource === 'function') {
+                try {
+                  stream = new window.EventSource('/app/sync/stream');
+                  stream.addEventListener('sync', function (event) {
+                    try {
+                      const payload = JSON.parse(event.data || '{}');
+                      applySyncSnapshot(payload);
+                    } catch (_error) {
+                      // Ignore malformed stream payloads.
+                    }
+                  });
+                } catch (_error) {
+                  stream = null;
+                }
+              }
+
+              const onWake = function () {
+                if (!document.hidden) {
+                  poll();
+                }
+              };
+
+              document.addEventListener('visibilitychange', onWake);
+              window.addEventListener('focus', onWake);
+
+              return function () {
+                clearInterval(timer);
+                document.removeEventListener('visibilitychange', onWake);
+                window.removeEventListener('focus', onWake);
+                if (stream) {
+                  stream.close();
+                }
+              };
             }, []);
 
             const progressPercent = sync.scanned > 0
@@ -1712,6 +1775,42 @@ function requireApiKey(req, res, next) {
   next();
 }
 
+function setNoStoreHeaders(res) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+}
+
+function buildSyncSnapshotPayload(lastSyncOverride) {
+  const effectiveSync = getEffectiveSyncRuntime();
+  const shouldReadState = typeof lastSyncOverride === 'undefined';
+  const lastSync = shouldReadState
+    ? (stateStore.readState().lastSync || null)
+    : lastSyncOverride;
+
+  return {
+    sync: {
+      running: effectiveSync.running,
+      startedAt: effectiveSync.runtime.startedAt,
+      processed: Number(effectiveSync.runtime.processed || 0),
+      scanned: Number(effectiveSync.runtime.scanned || 0),
+      synced: Number(effectiveSync.runtime.synced || 0),
+      changed: Number(effectiveSync.runtime.changed || 0),
+      unchanged: Number(effectiveSync.runtime.unchanged || 0),
+      currentProduct: effectiveSync.runtime.currentProduct || null,
+      recentProducts: Array.isArray(effectiveSync.runtime.recentProducts) ? effectiveSync.runtime.recentProducts : [],
+      skipped: Number(effectiveSync.runtime.skipped || 0),
+      errorsCount: Number(effectiveSync.runtime.errorsCount || 0)
+    },
+    lastSync,
+    serverTime: new Date().toISOString()
+  };
+}
+
+function emitSyncSnapshot(lastSyncOverride) {
+  syncEvents.emit('snapshot', buildSyncSnapshotPayload(lastSyncOverride));
+}
+
 app.get(['/', '/app'], (req, res) => {
   const render = async () => {
     try {
@@ -1739,32 +1838,52 @@ app.get(['/', '/app'], (req, res) => {
 
 app.get('/app/state', (_req, res) => {
   const sendState = async () => {
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma', 'no-cache');
-    res.set('Expires', '0');
+    setNoStoreHeaders(res);
     const state = stateStore.readState();
-    const effectiveSync = getEffectiveSyncRuntime();
+    const snapshot = buildSyncSnapshotPayload(state.lastSync || null);
     res.json({
       state,
-      sync: {
-        running: effectiveSync.running,
-        startedAt: effectiveSync.runtime.startedAt,
-        processed: Number(effectiveSync.runtime.processed || 0),
-        scanned: Number(effectiveSync.runtime.scanned || 0),
-        synced: Number(effectiveSync.runtime.synced || 0),
-        changed: Number(effectiveSync.runtime.changed || 0),
-        unchanged: Number(effectiveSync.runtime.unchanged || 0),
-        currentProduct: effectiveSync.runtime.currentProduct || null,
-        recentProducts: Array.isArray(effectiveSync.runtime.recentProducts) ? effectiveSync.runtime.recentProducts : [],
-        skipped: Number(effectiveSync.runtime.skipped || 0),
-        errorsCount: Number(effectiveSync.runtime.errorsCount || 0)
-      }
+      sync: snapshot.sync
     });
   };
 
   sendState().catch(error => {
     console.error('[HTTP] GET /app/state error:', error.message);
     res.status(500).json({ error: 'Internal Server Error', message: error.message });
+  });
+});
+
+app.get('/app/sync-state', (_req, res) => {
+  setNoStoreHeaders(res);
+  res.json(buildSyncSnapshotPayload());
+});
+
+app.get('/app/sync/stream', (req, res) => {
+  setNoStoreHeaders(res);
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const sendSnapshot = payload => {
+    res.write('event: sync\n');
+    res.write(`data: ${JSON.stringify(payload)}\n\n`);
+  };
+
+  const keepAlive = setInterval(() => {
+    res.write(': keepalive\n\n');
+  }, 15000);
+
+  const onSnapshot = payload => {
+    sendSnapshot(payload);
+  };
+
+  sendSnapshot(buildSyncSnapshotPayload());
+  syncEvents.on('snapshot', onSnapshot);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    syncEvents.off('snapshot', onSnapshot);
   });
 });
 
@@ -1952,6 +2071,8 @@ app.use((err, req, res, next) => {
 
 let isSyncRunning = false;
 let isHydratingProducts = false;
+const syncEvents = new EventEmitter();
+syncEvents.setMaxListeners(0);
 const syncRuntimeFile = path.resolve(config.paths.dataDir, 'sync-runtime.json');
 const DEFAULT_SHARED_SYNC_RUNTIME = {
   running: false,
@@ -2145,6 +2266,7 @@ function startSync(trigger) {
     skipped: 0,
     errorsCount: 0
   });
+  emitSyncSnapshot(null);
 
   setImmediate(async () => {
     try {
@@ -2179,6 +2301,7 @@ function startSync(trigger) {
             skipped: syncRuntime.skipped,
             errorsCount: syncRuntime.errorsCount
           });
+          emitSyncSnapshot(null);
         }
       });
       console.log('[SYNC] completed', {
@@ -2216,6 +2339,7 @@ function startSync(trigger) {
         skipped: 0,
         errorsCount: 0
       });
+      emitSyncSnapshot();
     }
   });
 
