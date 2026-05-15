@@ -808,6 +808,36 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           padding-left: 18px;
         }
 
+        .sync-live-title-main {
+          margin: 0 0 14px;
+          font-size: 15px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: var(--ink);
+        }
+
+        @keyframes glow-rotate {
+          0% {
+            box-shadow: 0 0 0 1px #1f6f5f, 0 0 12px 0 rgba(31, 111, 95, 0.3);
+          }
+          25% {
+            box-shadow: 0 0 0 1px #1f6f5f, 4px 0 12px 0 rgba(31, 111, 95, 0.4);
+          }
+          50% {
+            box-shadow: 0 0 0 1px #1f6f5f, 0 4px 12px 0 rgba(31, 111, 95, 0.3);
+          }
+          75% {
+            box-shadow: 0 0 0 1px #1f6f5f, -4px 0 12px 0 rgba(31, 111, 95, 0.4);
+          }
+          100% {
+            box-shadow: 0 0 0 1px #1f6f5f, 0 0 12px 0 rgba(31, 111, 95, 0.3);
+          }
+        }
+
+        .sync-live-panel.is-running {
+          animation: glow-rotate 2.5s ease-in-out infinite;
+        }
+
         @media (max-width: 960px) {
           .hero,
           .grid {
@@ -1163,6 +1193,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             const [wasRunning, setWasRunning] = window.React.useState(Boolean(initialSync.running));
             const [showLastReport, setShowLastReport] = window.React.useState(Boolean(initialLastSync));
             const completedSyncRef = window.React.useRef(initialLastSync && initialLastSync.finishedAt ? initialLastSync.finishedAt : '');
+            const wasRunningRef = window.React.useRef(Boolean(initialSync.running));
 
             const refreshStatus = window.React.useCallback(async function () {
               try {
@@ -1181,6 +1212,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                   console.log('[POLL] sync running', {
                     processed: nextSync.processed,
                     scanned: nextSync.scanned,
+                    recentProducts: Array.isArray(nextSync.recentProducts) ? nextSync.recentProducts.length : 0,
                     currentProduct: nextSync.currentProduct ? nextSync.currentProduct.title : null
                   });
                 }
@@ -1190,10 +1222,12 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 setSync(nextSync);
 
                 if (nextSync.running) {
+                  wasRunningRef.current = true;
                   setWasRunning(true);
                 }
 
-                if (!nextSync.running && wasRunning) {
+                if (!nextSync.running && wasRunningRef.current) {
+                  wasRunningRef.current = false;
                   setWasRunning(false);
 
                   if (nextLastSync && nextLastSync.finishedAt) {
@@ -1207,11 +1241,12 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                   }
                 }
               } catch (_error) {
-                // Ignore transient polling errors.
+                console.error('[POLL] error', _error.message);
               }
-            }, [wasRunning]);
+            }, []);
 
             window.React.useEffect(function () {
+              refreshStatus();
               const timer = setInterval(refreshStatus, 2000);
               return function () { clearInterval(timer); };
             }, [refreshStatus]);
@@ -1253,8 +1288,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             const previousProduct = recentProducts && recentProducts.length > 0 ? recentProducts[0] : null;
 
             const livePanel = sync.running
-              ? e('div', { key: 'live-panel', className: 'sync-live-panel' }, [
-                  e('p', { key: 'live-title', className: 'sync-live-title' },
+              ? e('div', { key: 'live-panel', className: 'sync-live-panel is-running' }, [
+                  e('h2', { key: 'live-title', className: 'sync-live-title-main' },
                     'Sto sincronizzando i prodotti con gli ultimi prezzi disponibili'
                   ),
                   currentProduct
