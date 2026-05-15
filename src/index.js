@@ -111,8 +111,28 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <title>IYC Catalog Connector</title>
       <style>
         :root {
+          --bg: #09090b;
+          --bg-grad-1: rgba(37, 99, 235, 0.12);
+          --bg-grad-2: rgba(14, 165, 233, 0.10);
+          --panel: rgba(24, 24, 27, 0.88);
+          --ink: #fafafa;
+          --muted: #a1a1aa;
+          --line: #27272a;
+          --accent: #2563eb;
+          --accent-strong: #1d4ed8;
+          --warn: #f87171;
+          --ok: #34d399;
+          --input-bg: #18181b;
+          --chip-bg: #111113;
+          --shadow: 0 18px 48px rgba(31, 36, 31, 0.08);
+          color-scheme: dark;
+        }
+
+        [data-theme="light"] {
           --bg: #f5f1e8;
-          --panel: #fffaf1;
+          --bg-grad-1: rgba(31, 111, 95, 0.14);
+          --bg-grad-2: rgba(143, 61, 46, 0.10);
+          --panel: rgba(255, 250, 241, 0.92);
           --ink: #1e241f;
           --muted: #667067;
           --line: #d8cfbe;
@@ -120,7 +140,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           --accent-strong: #154d42;
           --warn: #8f3d2e;
           --ok: #1c6b49;
-          --shadow: 0 18px 48px rgba(31, 36, 31, 0.08);
+          --input-bg: #fff;
+          --chip-bg: #efe6d4;
+          color-scheme: light;
         }
 
         * { box-sizing: border-box; }
@@ -129,9 +151,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
           color: var(--ink);
           background:
-            radial-gradient(circle at top left, rgba(31, 111, 95, 0.14), transparent 28%),
-            radial-gradient(circle at top right, rgba(143, 61, 46, 0.10), transparent 22%),
-            linear-gradient(180deg, #f8f4eb 0%, var(--bg) 100%);
+            radial-gradient(circle at top left, var(--bg-grad-1), transparent 28%),
+            radial-gradient(circle at top right, var(--bg-grad-2), transparent 22%),
+            linear-gradient(180deg, #0b0b0f 0%, var(--bg) 100%);
         }
 
         .shell {
@@ -149,11 +171,23 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .panel {
-          background: rgba(255, 250, 241, 0.92);
+          background: var(--panel);
           backdrop-filter: blur(8px);
           border: 1px solid var(--line);
           border-radius: 24px;
           box-shadow: var(--shadow);
+        }
+
+        .theme-toggle {
+          justify-self: end;
+          border: 1px solid var(--line);
+          background: var(--chip-bg);
+          color: var(--ink);
+          border-radius: 10px;
+          padding: 10px 12px;
+          font-size: 13px;
+          line-height: 1;
+          cursor: pointer;
         }
 
         .hero-main {
@@ -209,7 +243,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           padding: 14px 18px;
           border-radius: 16px;
           border: 1px solid var(--line);
-          background: rgba(255, 255, 255, 0.72);
+          background: rgba(24, 24, 27, 0.72);
         }
 
         .flash.info { color: var(--accent-strong); }
@@ -253,7 +287,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           padding: 14px 16px;
           border-radius: 14px;
           border: 1px solid var(--line);
-          background: #fff;
+          background: var(--input-bg);
           font: inherit;
           color: var(--ink);
         }
@@ -271,7 +305,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         button.secondary {
-          background: #efe6d4;
+          background: var(--chip-bg);
           color: var(--ink);
         }
 
@@ -285,7 +319,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           object-fit: cover;
           border-radius: 10px;
           border: 1px solid var(--line);
-          background: #fff;
+          background: var(--input-bg);
         }
 
         .empty-thumb {
@@ -346,6 +380,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             <p class="lead">Questa app ora usa il backend del progetto come dashboard operativa. Da qui puoi forzare il sync del catalogo Google Sheets verso Shopify, aggiornare la marginalità percentuale e controllare gli ultimi prodotti sincronizzati.</p>
           </article>
           <aside class="panel hero-side">
+            <button type="button" class="theme-toggle" id="theme-toggle">Tema: Dark</button>
             <div>
               <p class="metric-label">Store Shopify</p>
               <p class="metric-value">${escapeHtml(config.shopify.storeDomain)}</p>
@@ -434,6 +469,37 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           </article>
         </section>
       </main>
+      <script>
+        (function () {
+          const STORAGE_KEY = 'iyc-theme';
+          const root = document.documentElement;
+          const saved = localStorage.getItem(STORAGE_KEY);
+          const initial = saved === 'light' || saved === 'dark'
+            ? saved
+            : 'dark';
+          root.setAttribute('data-theme', initial);
+
+          const button = document.getElementById('theme-toggle');
+          if (!button) {
+            return;
+          }
+
+          const syncLabel = function () {
+            const current = root.getAttribute('data-theme') || 'dark';
+            button.textContent = current === 'dark' ? 'Tema: Dark' : 'Tema: Light';
+          };
+
+          syncLabel();
+
+          button.addEventListener('click', function () {
+            const current = root.getAttribute('data-theme') || 'dark';
+            const next = current === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
+            localStorage.setItem(STORAGE_KEY, next);
+            syncLabel();
+          });
+        })();
+      </script>
       <script id="dashboard-bootstrap" type="application/json">${serializeForScript(initialDashboardPayload)}</script>
       <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
       <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
