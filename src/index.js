@@ -2197,6 +2197,155 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           window.addEventListener('beforeunload', disposeSseLabWidget);
         })();
       </script>
+      <script>
+        (function () {
+          const widgetNode = document.getElementById('sync-sse-lab-root');
+          if (!widgetNode) {
+            return;
+          }
+
+          let stream = null;
+          let timer = null;
+          let stopped = false;
+          let pollDelay = 2000;
+
+          const escapeHtml = function (value) {
+            return String(value || '')
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+          };
+
+          const closeStream = function () {
+            if (stream) {
+              stream.close();
+              stream = null;
+            }
+          };
+
+          const render = function (payload) {
+            const sync = payload && payload.sync ? payload.sync : null;
+            if (!sync || !sync.running) {
+              widgetNode.style.display = 'none';
+              widgetNode.innerHTML = '';
+              closeStream();
+              pollDelay = 2000;
+              return;
+            }
+
+            widgetNode.style.display = 'grid';
+
+            const scanned = Number(sync.scanned || 0);
+            const processed = Number(sync.processed || 0);
+            const progressPercent = scanned > 0 ? Math.min(100, Math.round((processed / scanned) * 100)) : 0;
+            const currentProduct = sync.currentProduct || null;
+            const recentProducts = Array.isArray(sync.recentProducts) ? sync.recentProducts : [];
+            const lastItem = recentProducts.length ? recentProducts[0] : null;
+
+            widgetNode.innerHTML = [
+              '<div class="sse-lab-head">',
+              '<p class="sse-lab-title">Widget sperimentale solo SSE</p>',
+              '<span class="sse-lab-chip">SSE attivo · stream in tempo reale</span>',
+              '</div>',
+              '<p class="sse-lab-copy">Aggiornamento live forzato durante sync attivo.</p>',
+              '<div class="sse-lab-track"><div class="sse-lab-fill" style="width:' + progressPercent + '%;"></div></div>',
+              '<div class="sse-lab-metrics">',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Stato</span><span class="sse-lab-metric-value">RUN</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Progresso</span><span class="sse-lab-metric-value">' + progressPercent + '%</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Processati</span><span class="sse-lab-metric-value">' + processed + '/' + scanned + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Sincronizzati</span><span class="sse-lab-metric-value">' + Number(sync.synced || 0) + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Cambiati</span><span class="sse-lab-metric-value">' + Number(sync.changed || 0) + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Errori</span><span class="sse-lab-metric-value">' + Number(sync.errorsCount || 0) + '</span></div>',
+              '</div>',
+              lastItem
+                ? [
+                    '<div class="sse-lab-last">',
+                    lastItem.imageUrl
+                      ? '<img class="sse-lab-last-thumb" src="' + escapeHtml(lastItem.imageUrl) + '" alt="' + escapeHtml(lastItem.title || 'Prodotto sincronizzato') + '" />'
+                      : '<div class="sse-lab-last-thumb">N/A</div>',
+                    '<div>',
+                    '<p class="sse-lab-last-label">Ultimo prodotto sincronizzato</p>',
+                    '<p class="sse-lab-last-name">' + escapeHtml(lastItem.title || 'Prodotto') + '</p>',
+                    '<p class="sse-lab-last-meta">Stato: ' + escapeHtml(String(lastItem.status || 'sync').toUpperCase()) + '</p>',
+                    '</div>',
+                    '</div>'
+                  ].join('')
+                : '<div class="sse-lab-last"><div class="sse-lab-last-thumb">N/A</div><div><p class="sse-lab-last-label">Ultimo prodotto sincronizzato</p><p class="sse-lab-last-name">In attesa...</p></div></div>',
+              currentProduct
+                ? '<p class="sse-lab-product">In lavorazione: <strong>' + escapeHtml(currentProduct.title || 'prodotto') + '</strong></p>'
+                : '<p class="sse-lab-product">In lavorazione: <strong>caricamento...</strong></p>'
+            ].join('');
+
+            pollDelay = 450;
+          };
+
+          const schedulePoll = function () {
+            if (stopped) {
+              return;
+            }
+            timer = setTimeout(poll, pollDelay);
+          };
+
+          const fetchSnapshot = async function () {
+            const response = await fetch('/app/sync-state?ts=' + Date.now(), {
+              cache: 'no-store',
+              headers: { 'Cache-Control': 'no-cache' }
+            });
+            if (!response.ok) {
+              throw new Error('sync-state unavailable');
+            }
+            return response.json();
+          };
+
+          const openStreamIfNeeded = function () {
+            if (stream || typeof window.EventSource !== 'function') {
+              return;
+            }
+
+            try {
+              stream = new window.EventSource('/app/sync/stream');
+              stream.addEventListener('sync', function (event) {
+                try {
+                  const payload = JSON.parse(event.data || '{}');
+                  render(payload);
+                } catch (_error) {
+                  // Ignore malformed event payloads.
+                }
+              });
+            } catch (_error) {
+              stream = null;
+            }
+          };
+
+          const poll = async function () {
+            try {
+              const payload = await fetchSnapshot();
+              render(payload);
+
+              const sync = payload && payload.sync ? payload.sync : null;
+              if (sync && sync.running) {
+                openStreamIfNeeded();
+              }
+            } catch (_error) {
+              // Ignore transient polling errors.
+            } finally {
+              schedulePoll();
+            }
+          };
+
+          poll();
+
+          window.addEventListener('beforeunload', function () {
+            stopped = true;
+            if (timer) {
+              clearTimeout(timer);
+            }
+            closeStream();
+          });
+        })();
+      </script>
     </body>
   </html>`;
 }
