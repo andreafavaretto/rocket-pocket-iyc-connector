@@ -404,6 +404,24 @@ function buildOAuthRedirectUri(req) {
   return `${buildAppBaseUrl(req)}/auth/callback`;
 }
 
+function parseCookies(cookieHeader) {
+  return String(cookieHeader || '')
+    .split(';')
+    .map(part => part.trim())
+    .filter(Boolean)
+    .reduce((acc, part) => {
+      const separatorIndex = part.indexOf('=');
+      if (separatorIndex <= 0) {
+        return acc;
+      }
+
+      const key = part.slice(0, separatorIndex).trim();
+      const value = part.slice(separatorIndex + 1).trim();
+      acc[key] = decodeURIComponent(value);
+      return acc;
+    }, {});
+}
+
 function buildShopifyAuthMessage(query) {
   const pairs = Object.keys(query)
     .filter(key => key !== 'hmac' && key !== 'signature')
@@ -466,6 +484,9 @@ app.get('/auth/start', (req, res) => {
   const nonce = crypto.randomBytes(16).toString('hex');
   stateStore.createPendingOAuthState(nonce, shop);
 
+  // Fallback for environments where filesystem state can be racy.
+  res.setHeader('Set-Cookie', `oauth_state=${encodeURIComponent(nonce)}; Max-Age=900; Path=/; HttpOnly; Secure; SameSite=Lax`);
+
   const params = new URLSearchParams({
     client_id: config.shopify.clientId,
     scope: config.shopify.accessScopes,
@@ -480,6 +501,8 @@ app.get('/auth/callback', async (req, res) => {
   const shop = String(req.query.shop || '').trim();
   const code = String(req.query.code || '').trim();
   const nonce = String(req.query.state || '').trim();
+  const cookies = parseCookies(req.headers.cookie || '');
+  const nonceFromCookie = String(cookies.oauth_state || '').trim();
 
   if (!isValidShopDomain(shop) || !code || !nonce) {
     redirectWithMessage(res, 'error', 'Callback Shopify incompleto o non valido.');
@@ -492,10 +515,15 @@ app.get('/auth/callback', async (req, res) => {
   }
 
   const pendingState = stateStore.consumePendingOAuthState(nonce);
-  if (!pendingState || pendingState.shopDomain !== shop) {
+  const hasValidStateFromStore = Boolean(pendingState && pendingState.shopDomain === shop);
+  const hasValidStateFromCookie = Boolean(nonceFromCookie && nonceFromCookie === nonce);
+  if (!hasValidStateFromStore && !hasValidStateFromCookie) {
     redirectWithMessage(res, 'error', 'Stato OAuth Shopify non valido o scaduto.');
     return;
   }
+
+  // Clear oauth state cookie after successful validation.
+  res.setHeader('Set-Cookie', 'oauth_state=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax');
 
   try {
     const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
