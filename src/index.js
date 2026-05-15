@@ -524,7 +524,12 @@ app.get('/auth/callback', async (req, res) => {
   }
 
   const pendingState = stateStore.consumePendingOAuthState(nonce);
-  const hasValidStateFromStore = Boolean(pendingState && pendingState.shopDomain === shop);
+  const hasValidStateFromStore = Boolean(
+    pendingState && (
+      pendingState.shopDomain === shop ||
+      pendingState.shopDomain === configuredShop
+    )
+  );
   const hasValidStateFromCookie = Boolean(nonceFromCookie && nonceFromCookie === nonce);
   if (!hasValidStateFromStore && !hasValidStateFromCookie) {
     redirectWithMessage(res, 'error', 'Stato OAuth Shopify non valido o scaduto.');
