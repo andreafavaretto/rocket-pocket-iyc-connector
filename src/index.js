@@ -186,55 +186,30 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>IYC Catalog Connector</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
       <style>
         :root {
-          --bg: #050506;
-          --bg-grad-1: rgba(185, 28, 28, 0.12);
-          --bg-grad-2: rgba(255, 255, 255, 0.03);
-          --panel: rgba(14, 14, 18, 0.92);
-          --ink: #fafafa;
-          --muted: #b0b0ba;
-          --line: #2a2a31;
-          --accent: #b91c1c;
-          --accent-strong: #7f1d1d;
-          --warn: #f87171;
-          --ok: #34d399;
-          --input-bg: #141417;
-          --chip-bg: #111114;
-          --shadow: 0 18px 48px rgba(31, 36, 31, 0.08);
-          color-scheme: dark;
-        }
-
-        [data-theme="light"] {
-          --bg: #f5f1e8;
-          --bg-grad-1: rgba(31, 111, 95, 0.14);
-          --bg-grad-2: rgba(143, 61, 46, 0.10);
-          --panel: rgba(255, 250, 241, 0.92);
-          --ink: #1e241f;
-          --muted: #667067;
-          --line: #d8cfbe;
-          --accent: #1f6f5f;
-          --accent-strong: #154d42;
-          --warn: #8f3d2e;
-          --ok: #1c6b49;
-          --input-bg: #fff;
-          --chip-bg: #efe6d4;
+          --bg: #f1f2f4;
+          --panel: #ffffff;
+          --ink: #202223;
+          --muted: #6d7175;
+          --line: #d9dcde;
+          --accent: #008060;
+          --accent-strong: #006e52;
+          --warn: #d72c0d;
+          --ok: #108043;
+          --input-bg: #ffffff;
+          --chip-bg: #f6f6f7;
+          --shadow: 0 1px 0 rgba(22, 29, 37, 0.05), 0 2px 6px rgba(22, 29, 37, 0.06);
           color-scheme: light;
         }
 
         * { box-sizing: border-box; }
         body {
           margin: 0;
-          font-family: 'Manrope', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
           font-size: 12.5px;
           color: var(--ink);
-          background:
-            radial-gradient(circle at top left, var(--bg-grad-1), transparent 28%),
-            radial-gradient(circle at top right, var(--bg-grad-2), transparent 22%),
-            linear-gradient(180deg, #09090b 0%, var(--bg) 100%);
+          background: var(--bg);
         }
 
         .shell {
@@ -253,40 +228,35 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .panel {
           background: var(--panel);
-          backdrop-filter: blur(8px);
           border: 1px solid var(--line);
-          border-radius: 24px;
-          box-shadow:
-            0 18px 48px rgba(0, 0, 0, 0.32),
-            inset 0 1px 0 rgba(255, 255, 255, 0.04);
+          border-radius: 12px;
+          box-shadow: var(--shadow);
         }
 
         .hero-main {
           padding: 28px;
-          border-left: 2px solid rgba(185, 28, 28, 0.55);
         }
 
         .eyebrow {
           margin: 0 0 10px;
-          color: #fca5a5;
+          color: var(--accent);
           font-size: 12px;
-          letter-spacing: 0.18em;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
         }
 
         h1 {
           margin: 0;
-          font-family: 'Space Grotesk', 'Manrope', sans-serif;
-          font-size: clamp(1.5rem, 2.8vw, 2.45rem);
-          line-height: 1;
-          letter-spacing: -0.07em;
-          font-weight: 700;
+          font-size: clamp(1.35rem, 2.2vw, 2rem);
+          line-height: 1.2;
+          letter-spacing: -0.02em;
+          font-weight: 650;
         }
 
         .lead {
           margin: 12px 0 0;
           max-width: 56ch;
-          color: #a8a8b4;
+          color: var(--muted);
           font-size: 13px;
           line-height: 1.55;
         }
@@ -300,10 +270,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .metric-label {
           margin: 0 0 4px;
-          color: #9c9ca6;
+          color: var(--muted);
           font-size: 10px;
           text-transform: uppercase;
-          letter-spacing: 0.16em;
+          letter-spacing: 0.08em;
         }
 
         .metric-value {
@@ -317,9 +287,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .flash {
           margin-bottom: 20px;
           padding: 14px 18px;
-          border-radius: 16px;
+          border-radius: 10px;
           border: 1px solid var(--line);
-          background: rgba(14, 14, 18, 0.82);
+          background: #ffffff;
         }
 
         .flash.info { color: var(--accent-strong); }
@@ -343,16 +313,15 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .card h2 {
           margin: 0 0 14px;
-          font-family: 'Space Grotesk', 'Manrope', sans-serif;
           font-size: 15px;
           font-weight: 700;
-          letter-spacing: -0.04em;
+          letter-spacing: -0.01em;
         }
 
         .card p,
         .card li,
         .card label {
-          color: #a4a4af;
+          color: var(--muted);
           line-height: 1.5;
           font-size: 12px;
         }
@@ -374,43 +343,31 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         button {
           appearance: none;
-          border: 0;
-          border-radius: 999px;
+          border: 1px solid #00664f;
+          border-radius: 8px;
           padding: 11px 14px;
-          background: linear-gradient(135deg, #fca5a5 0%, #b91c1c 42%, #1b1b20 100%);
-          color: #fff9f9;
+          background: #008060;
+          color: #ffffff;
           font: inherit;
-          font-weight: 800;
+          font-weight: 600;
           cursor: pointer;
-          text-transform: uppercase;
-          letter-spacing: 0.12em;
-          font-size: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.10);
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.18),
-            0 12px 28px rgba(127, 29, 29, 0.38);
-          transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+          font-size: 12px;
+          box-shadow: none;
+          transition: none;
         }
 
         button:hover {
-          transform: translateY(-1px);
-          filter: brightness(1.04);
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.24),
-            0 14px 30px rgba(127, 29, 29, 0.34);
+          background: #006e52;
         }
 
         button:active {
-          transform: translateY(0);
-          filter: brightness(0.98);
+          background: #00533e;
         }
 
         button.secondary {
-          background: linear-gradient(135deg, #121214 0%, #1f1f24 100%);
-          color: #f5f5f7;
-          box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.06),
-            0 10px 24px rgba(0, 0, 0, 0.26);
+          background: #ffffff;
+          color: #202223;
+          border: 1px solid #babfc3;
         }
 
         .table-wrap {
@@ -443,7 +400,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .search-input::placeholder {
-          color: #7f7f89;
+          color: #8c9196;
         }
 
         .search-meta {
@@ -451,7 +408,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           justify-content: space-between;
           gap: 12px;
           align-items: center;
-          color: #9a9aa5;
+          color: var(--muted);
           font-size: 11px;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -472,16 +429,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .product-row:hover {
-          background: rgba(185, 28, 28, 0.06);
+          background: #f6f6f7;
         }
 
         .product-row:focus-visible {
-          outline: 2px solid rgba(185, 28, 28, 0.5);
+          outline: 2px solid rgba(0, 128, 96, 0.45);
           outline-offset: -2px;
         }
 
         .product-row.is-active {
-          background: rgba(185, 28, 28, 0.11);
+          background: #edf7f4;
         }
 
         .empty-thumb {
@@ -509,9 +466,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           right: 0;
           width: min(420px, calc(100vw - 28px));
           height: 100vh;
-          background: rgba(10, 10, 14, 0.98);
+          background: #ffffff;
           border-left: 1px solid var(--line);
-          box-shadow: -18px 0 50px rgba(0, 0, 0, 0.35);
+          box-shadow: -8px 0 28px rgba(22, 29, 37, 0.12);
           transform: translateX(105%);
           transition: transform 220ms ease;
           z-index: 41;
@@ -534,30 +491,31 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .drawer-title {
           margin: 0;
-          font-family: 'Space Grotesk', 'Manrope', sans-serif;
           font-size: 16px;
           line-height: 1.05;
-          letter-spacing: -0.05em;
+          letter-spacing: -0.01em;
         }
 
         .drawer-subtitle {
           margin: 6px 0 0;
-          color: #9a9aa5;
+          color: var(--muted);
           font-size: 11px;
           text-transform: uppercase;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.08em;
         }
 
         .drawer-close {
           width: 34px;
           height: 34px;
           padding: 0;
-          border-radius: 999px;
+          border-radius: 8px;
           display: grid;
           place-items: center;
           font-size: 16px;
           line-height: 1;
-          background: linear-gradient(135deg, #27272a 0%, #111114 100%);
+          background: #ffffff;
+          border: 1px solid var(--line);
+          color: var(--ink);
         }
 
         .drawer-body {
@@ -591,16 +549,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .drawer-card {
           padding: 12px;
           border: 1px solid var(--line);
-          border-radius: 16px;
-          background: rgba(255, 255, 255, 0.02);
+          border-radius: 10px;
+          background: #ffffff;
         }
 
         .drawer-card label {
           display: block;
           margin: 0 0 5px;
-          color: #9a9aa5;
+          color: var(--muted);
           font-size: 10px;
-          letter-spacing: 0.14em;
+          letter-spacing: 0.08em;
           text-transform: uppercase;
         }
 
@@ -610,14 +568,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .drawer-note {
-          color: #9a9aa5;
+          color: var(--muted);
           font-size: 12px;
           line-height: 1.5;
         }
 
         .drawer-pricing-title {
           margin: 2px 0 0;
-          color: #e4e4ea;
+          color: var(--ink);
           font-size: 12px;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -625,9 +583,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .drawer-pricing-wrap {
           border: 1px solid var(--line);
-          border-radius: 16px;
+          border-radius: 10px;
           overflow: hidden;
-          background: rgba(255, 255, 255, 0.02);
+          background: #ffffff;
         }
 
         .drawer-pricing-table {
@@ -645,7 +603,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .drawer-pricing-table th {
           font-size: 10px;
-          color: #9b9ba4;
+          color: var(--muted);
           letter-spacing: 0.1em;
           text-transform: uppercase;
         }
@@ -655,14 +613,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .drawer-pricing-empty {
-          color: #9a9aa5;
+          color: var(--muted);
           text-align: center;
         }
 
         .sync-live-panel {
           border: 1px solid var(--line);
-          background: rgba(16, 16, 20, 0.9);
-          border-radius: 14px;
+          background: #ffffff;
+          border-radius: 10px;
           padding: 12px;
           display: grid;
           gap: 10px;
@@ -670,7 +628,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .sync-live-title {
           margin: 0;
-          color: #f0f0f7;
+          color: var(--ink);
           font-size: 12px;
           letter-spacing: 0.06em;
           text-transform: uppercase;
@@ -694,7 +652,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .sync-current-text {
           margin: 0;
-          color: #e6e6ee;
+          color: var(--ink);
           font-size: 12px;
           line-height: 1.4;
           white-space: nowrap;
@@ -703,7 +661,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .sync-live-meta {
-          color: #a1a1ad;
+          color: var(--muted);
           font-size: 11px;
           letter-spacing: 0.08em;
           text-transform: uppercase;
@@ -715,7 +673,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .sync-live-list {
           margin: 0;
           padding-left: 18px;
-          color: #d7d7e1;
+          color: var(--ink);
           font-size: 11px;
           display: grid;
           gap: 4px;
