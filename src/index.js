@@ -1070,6 +1070,56 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           color: #0d5d3d;
         }
 
+        .sse-lab-last {
+          display: grid;
+          grid-template-columns: 52px minmax(0, 1fr);
+          gap: 10px;
+          align-items: center;
+          border: 1px solid rgba(13, 98, 63, 0.16);
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.72);
+          padding: 8px;
+        }
+
+        .sse-lab-last-thumb {
+          width: 52px;
+          height: 52px;
+          border-radius: 8px;
+          object-fit: cover;
+          border: 1px solid rgba(13, 98, 63, 0.2);
+          background: rgba(216, 245, 229, 0.9);
+          display: grid;
+          place-items: center;
+          font-size: 11px;
+          color: #49715f;
+        }
+
+        .sse-lab-last-label {
+          margin: 0;
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: #4f6f61;
+        }
+
+        .sse-lab-last-name {
+          margin: 2px 0 0;
+          font-size: 14px;
+          font-weight: 700;
+          color: #0d5d3d;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .sse-lab-last-meta {
+          margin: 3px 0 0;
+          font-size: 11px;
+          color: #557666;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
         @keyframes sse-lab-shine {
           to {
             background-position: 190px 0, 0 0;
@@ -1533,6 +1583,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               ? Math.min(100, Math.round((processed / scanned) * 100))
               : 0;
             const currentProduct = sync.currentProduct || null;
+            const syncRecentProducts = Array.isArray(sync.recentProducts) ? sync.recentProducts : [];
+            const lastSyncRecentProducts = payload && payload.lastSync && Array.isArray(payload.lastSync.recentProducts)
+              ? payload.lastSync.recentProducts
+              : [];
+            const lastSyncedProduct = syncRecentProducts.length
+              ? syncRecentProducts[0]
+              : (lastSyncRecentProducts.length ? lastSyncRecentProducts[0] : null);
+            const lastSyncedStatus = lastSyncedProduct && lastSyncedProduct.status
+              ? String(lastSyncedProduct.status).toUpperCase()
+              : 'SYNC';
             const pulseLabel = running ? 'SSE attivo · stream in tempo reale' : 'SSE in attesa · polling di controllo';
 
             sseLabNode.innerHTML = [
@@ -1552,6 +1612,20 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Cambiati</span><span class="sse-lab-metric-value">' + Number(sync.changed || 0) + '</span></div>',
               '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Errori</span><span class="sse-lab-metric-value">' + Number(sync.errorsCount || 0) + '</span></div>',
               '</div>',
+              lastSyncedProduct
+                ? [
+                    '<div class="sse-lab-last">',
+                    lastSyncedProduct.imageUrl
+                      ? '<img class="sse-lab-last-thumb" src="' + escapeHtml(lastSyncedProduct.imageUrl) + '" alt="' + escapeHtml(lastSyncedProduct.title || 'Prodotto sincronizzato') + '" />'
+                      : '<div class="sse-lab-last-thumb">N/A</div>',
+                    '<div>',
+                    '<p class="sse-lab-last-label">Ultimo prodotto sincronizzato</p>',
+                    '<p class="sse-lab-last-name">' + escapeHtml(lastSyncedProduct.title || 'Prodotto') + '</p>',
+                    '<p class="sse-lab-last-meta">Stato: ' + escapeHtml(lastSyncedStatus) + '</p>',
+                    '</div>',
+                    '</div>'
+                  ].join('')
+                : '<div class="sse-lab-last"><div class="sse-lab-last-thumb">N/A</div><div><p class="sse-lab-last-label">Ultimo prodotto sincronizzato</p><p class="sse-lab-last-name">Nessun dato disponibile</p></div></div>',
               currentProduct
                 ? '<p class="sse-lab-product">Prodotto in lavorazione: <strong>' + escapeHtml(currentProduct.title || 'prodotto') + '</strong> (' + escapeHtml((currentProduct.index || 0) + '/' + (currentProduct.total || scanned || 0)) + ')</p>'
                 : '<p class="sse-lab-product">In attesa del prossimo batch di prodotti da sincronizzare.</p>'
@@ -2123,166 +2197,6 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           }
 
           window.addEventListener('beforeunload', disposeSseLabWidget);
-        })();
-      </script>
-      <script>
-        (function () {
-          const fallbackPanel = document.getElementById('sync-live-fallback');
-          const sseLabNode = document.getElementById('sync-sse-lab-root');
-          const bootstrapNode = document.getElementById('dashboard-bootstrap');
-
-          if (!sseLabNode && !fallbackPanel) {
-            return;
-          }
-
-          const bootstrap = bootstrapNode ? JSON.parse(bootstrapNode.textContent || '{}') : {};
-          let stream = null;
-          let timer = null;
-          let stopped = false;
-          let pollDelay = 2000;
-
-          const escapeHtml = function (value) {
-            return String(value || '')
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;')
-              .replace(/'/g, '&#39;');
-          };
-
-          const renderSseLab = function (sync) {
-            if (!sseLabNode) {
-              return;
-            }
-
-            const scanned = Number(sync.scanned || 0);
-            const processed = Number(sync.processed || 0);
-            const percent = scanned > 0 ? Math.min(100, Math.round((processed / scanned) * 100)) : 0;
-            const currentProduct = sync.currentProduct || null;
-
-            sseLabNode.innerHTML = [
-              '<div class="sse-lab-head">',
-              '<p class="sse-lab-title">Widget sperimentale solo SSE</p>',
-              '<span class="sse-lab-chip">' + (sync.running ? 'SSE attivo' : 'In attesa') + '</span>',
-              '</div>',
-              '<p class="sse-lab-copy">Aggiornamento live con stream SSE e fallback polling locale.</p>',
-              '<div class="sse-lab-track"><div class="sse-lab-fill" style="width:' + percent + '%;"></div></div>',
-              '<div class="sse-lab-metrics">',
-              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Progresso</span><span class="sse-lab-metric-value">' + percent + '%</span></div>',
-              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Processati</span><span class="sse-lab-metric-value">' + processed + '/' + scanned + '</span></div>',
-              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Sincronizzati</span><span class="sse-lab-metric-value">' + Number(sync.synced || 0) + '</span></div>',
-              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Cambiati</span><span class="sse-lab-metric-value">' + Number(sync.changed || 0) + '</span></div>',
-              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Invariati</span><span class="sse-lab-metric-value">' + Number(sync.unchanged || 0) + '</span></div>',
-              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Errori</span><span class="sse-lab-metric-value">' + Number(sync.errorsCount || 0) + '</span></div>',
-              '</div>',
-              currentProduct
-                ? '<p class="sse-lab-product">In lavorazione: <strong>' + escapeHtml(currentProduct.title || 'prodotto') + '</strong></p>'
-                : '<p class="sse-lab-product">Nessun prodotto in lavorazione.</p>'
-            ].join('');
-          };
-
-          const renderVisibleFallback = function (sync) {
-            if (!fallbackPanel || fallbackPanel.style.display === 'none') {
-              return;
-            }
-
-            if (!sync.running) {
-              fallbackPanel.className = '';
-              fallbackPanel.innerHTML = '';
-              return;
-            }
-
-            const scanned = Number(sync.scanned || 0);
-            const processed = Number(sync.processed || 0);
-            const percent = scanned > 0 ? Math.min(100, Math.round((processed / scanned) * 100)) : 0;
-
-            fallbackPanel.className = 'sync-live-panel is-running';
-            fallbackPanel.innerHTML = [
-              '<h2 class="sync-live-title-main">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</h2>',
-              '<div class="sync-progress-track"><div class="sync-progress-fill" style="width:' + percent + '%;"></div></div>',
-              '<div class="sync-live-meta">',
-              '<span>Progresso: ' + percent + '%</span>',
-              '<span>Processati: ' + processed + '/' + scanned + '</span>',
-              '<span>Sincronizzati: ' + Number(sync.synced || 0) + '</span>',
-              '<span>Cambiati: ' + Number(sync.changed || 0) + '</span>',
-              '<span>Invariati: ' + Number(sync.unchanged || 0) + '</span>',
-              '<span>Errori: ' + Number(sync.errorsCount || 0) + '</span>',
-              '</div>'
-            ].join('');
-          };
-
-          const closeStream = function () {
-            if (stream) {
-              stream.close();
-              stream = null;
-            }
-          };
-
-          const schedulePoll = function () {
-            if (stopped) {
-              return;
-            }
-            timer = setTimeout(poll, pollDelay);
-          };
-
-          const applyPayload = function (payload) {
-            const sync = payload && payload.sync ? payload.sync : {};
-            renderSseLab(sync);
-            renderVisibleFallback(sync);
-            pollDelay = sync.running ? 500 : 2000;
-
-            if (sync.running && !stream && typeof window.EventSource === 'function') {
-              try {
-                stream = new window.EventSource('/app/sync/stream');
-                stream.addEventListener('sync', function (event) {
-                  try {
-                    applyPayload(JSON.parse(event.data || '{}'));
-                  } catch (_error) {
-                    // Ignore malformed stream payloads.
-                  }
-                });
-              } catch (_error) {
-                stream = null;
-              }
-            }
-
-            if (!sync.running) {
-              closeStream();
-            }
-          };
-
-          const fetchSnapshot = async function () {
-            const response = await fetch('/app/sync-state?ts=' + Date.now(), {
-              cache: 'no-store',
-              headers: { 'Cache-Control': 'no-cache' }
-            });
-            if (!response.ok) {
-              throw new Error('sync-state unavailable');
-            }
-            return response.json();
-          };
-
-          const poll = async function () {
-            try {
-              const payload = await fetchSnapshot();
-              applyPayload(payload);
-            } catch (_error) {
-              // Ignore transient polling errors.
-            } finally {
-              schedulePoll();
-            }
-          };
-
-          applyPayload({ sync: bootstrap.sync || {} });
-          poll();
-
-          window.addEventListener('beforeunload', function () {
-            stopped = true;
-            if (timer) {
-              clearTimeout(timer);
-            }
-            closeStream();
-          });
         })();
       </script>
     </body>

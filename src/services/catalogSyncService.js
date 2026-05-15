@@ -367,6 +367,7 @@ async function runCatalogSync(options = {}) {
           {
             title: product.name || '-',
             handle: productHandle,
+            imageUrl: productImageUrl,
             status: 'skipped'
           },
           ...summary.recentProducts
@@ -403,6 +404,7 @@ async function runCatalogSync(options = {}) {
           {
             title: payload.title,
             handle: payload.handle,
+            imageUrl: productImageUrl,
             status: 'changed'
           },
           ...summary.recentProducts
@@ -413,6 +415,7 @@ async function runCatalogSync(options = {}) {
           {
             title: payload.title,
             handle: payload.handle,
+            imageUrl: productImageUrl,
             status: 'unchanged'
           },
           ...summary.recentProducts
@@ -426,6 +429,7 @@ async function runCatalogSync(options = {}) {
         {
           title: product.name || '-',
           handle: productHandle,
+          imageUrl: productImageUrl,
           status: 'error'
         },
         ...summary.recentProducts
