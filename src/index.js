@@ -300,11 +300,18 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           display: grid;
           grid-template-columns: 380px minmax(0, 1fr);
           gap: 20px;
+          align-items: start;
         }
 
         .stack {
           display: grid;
           gap: 20px;
+          align-content: start;
+          grid-auto-rows: min-content;
+        }
+
+        .sync-live-full-row {
+          margin: 0 0 20px;
         }
 
         .card {
@@ -796,6 +803,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           </aside>
         </section>
 
+        <section class="sync-live-full-row">
+          <div id="sync-react-root"></div>
+        </section>
+
         <section class="grid">
           <div class="stack">
             <article class="panel card ops-widget">
@@ -826,7 +837,6 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                     <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
                   </form>
                 </div>
-                <div id="sync-react-root"></div>
                 <noscript>
                   <form method="post" action="/app/sync">
                     <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
