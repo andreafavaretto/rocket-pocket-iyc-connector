@@ -198,27 +198,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     markupPercent
   };
 
-  const serverProgressPercent = runtime.scanned > 0
-    ? Math.min(100, Math.round((runtime.processed / runtime.scanned) * 100))
-    : 0;
-  const syncLiveFallbackMarkup = isSyncRunning
-    ? `
-      <div class="sync-live-panel is-running" id="sync-live-fallback">
-        <h2 class="sync-live-title-main">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</h2>
-        <div class="sync-progress-track">
-          <div class="sync-progress-fill" style="width:${serverProgressPercent}%;"></div>
-        </div>
-        <div class="sync-live-meta">
-          <span>Progresso: ${serverProgressPercent}%</span>
-          <span>Processati: ${Number(runtime.processed || 0)}/${Number(runtime.scanned || 0)}</span>
-          <span>Sincronizzati: ${Number(runtime.synced || 0)}</span>
-          <span>Cambiati: ${Number(runtime.changed || 0)}</span>
-          <span>Invariati: ${Number(runtime.unchanged || 0)}</span>
-          <span>Errori: ${Number(runtime.errorsCount || 0)}</span>
-        </div>
-      </div>
-    `
-    : '<div id="sync-live-fallback"></div>';
+  const syncLiveFallbackMarkup = '<div id="sync-live-fallback" style="display:none"></div>';
 
   return `<!doctype html>
   <html lang="it">
@@ -971,7 +951,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           box-shadow:
             0 16px 34px rgba(17, 72, 47, 0.08),
             inset 0 0 0 1px rgba(255, 255, 255, 0.5);
-          display: grid;
+          display: none;
           gap: 12px;
         }
 
@@ -1188,7 +1168,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         <section class="sync-live-full-row">
           ${syncLiveFallbackMarkup}
-          <div id="sync-react-root"></div>
+          <div id="sync-react-root" style="display:none"></div>
           <div id="sync-sse-lab-root" class="sse-lab-widget"></div>
         </section>
 
@@ -1474,6 +1454,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           const liveFallbackNode = document.getElementById('sync-live-fallback');
           const fallbackNode = document.getElementById('sync-fallback-root');
           const sseLabNode = document.getElementById('sync-sse-lab-root');
+          const enableLegacySyncUi = false;
           const bootstrapNode = document.getElementById('dashboard-bootstrap');
           if (!bootstrapNode) {
             return;
@@ -1577,6 +1558,13 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
             const sync = payload && payload.sync ? payload.sync : {};
             const running = Boolean(sync.running);
+            if (!running) {
+              sseLabNode.style.display = 'none';
+              sseLabNode.innerHTML = '';
+              return;
+            }
+
+            sseLabNode.style.display = 'grid';
             const scanned = Number(sync.scanned || 0);
             const processed = Number(sync.processed || 0);
             const progressPercent = scanned > 0
@@ -2178,22 +2166,32 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             ]);
           }
 
-          try {
-            window.ReactDOM.createRoot(rootNode).render(e(SyncWidget));
-            if (liveFallbackNode) {
-              liveFallbackNode.style.display = 'none';
+          if (liveFallbackNode) {
+            liveFallbackNode.style.display = 'none';
+          }
+
+          if (rootNode) {
+            rootNode.style.display = 'none';
+          }
+
+          if (enableLegacySyncUi) {
+            try {
+              window.ReactDOM.createRoot(rootNode).render(e(SyncWidget));
+              if (liveFallbackNode) {
+                liveFallbackNode.style.display = 'none';
+              }
+              if (fallbackNode) {
+                fallbackNode.style.display = 'none';
+              }
+            } catch (_error) {
+              if (liveFallbackNode) {
+                liveFallbackNode.style.display = '';
+              }
+              if (fallbackNode) {
+                fallbackNode.style.display = '';
+              }
+              startFallbackPolling();
             }
-            if (fallbackNode) {
-              fallbackNode.style.display = 'none';
-            }
-          } catch (_error) {
-            if (liveFallbackNode) {
-              liveFallbackNode.style.display = '';
-            }
-            if (fallbackNode) {
-              fallbackNode.style.display = '';
-            }
-            startFallbackPolling();
           }
 
           window.addEventListener('beforeunload', disposeSseLabWidget);
