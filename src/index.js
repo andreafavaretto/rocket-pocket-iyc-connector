@@ -48,18 +48,20 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     title: product.title || handle,
     shopifyProductId: product.shopifyProductId || '-',
     imageFileName: product.imageFileName || '',
+    imageUrl: product.imageFileName ? `/images/${encodeURIComponent(product.imageFileName)}` : '',
     lastPrice: product.lastPrice || '-',
     lastBoxPrice: product.lastBoxPrice || '-',
     lastCasePrice: product.lastCasePrice || '-',
     sourceCurrency: product.sourceCurrency || '-',
     updatedAt: product.updatedAt || null
   }));
+  const sortedProducts = [...products].sort((left, right) => String(left.title).localeCompare(String(right.title)));
+  const dashboardProductsPayload = sortedProducts;
 
   const productRows = products.length
-    ? products
-        .sort((left, right) => String(left.title).localeCompare(String(right.title)))
-        .map(product => `
-          <tr>
+    ? sortedProducts
+        .map((product, index) => `
+          <tr class="product-row" tabindex="0" role="button" aria-label="Apri dettagli ${escapeHtml(product.title)}" data-product-index="${index}" data-search="${escapeHtml([product.title, product.handle, product.shopifyProductId, product.lastPrice, product.lastBoxPrice, product.lastCasePrice, product.sourceCurrency].join(' ').toLowerCase())}">
             <td>${product.imageFileName ? `<img class="thumb" src="/images/${encodeURIComponent(product.imageFileName)}" alt="${escapeHtml(product.title)}" loading="lazy" />` : '<span class="empty-thumb">-</span>'}</td>
             <td>${escapeHtml(product.title)}</td>
             <td><code>${escapeHtml(product.handle)}</code></td>
@@ -74,7 +76,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .join('')
     : `
       <tr>
-        <td colspan="9" class="empty">Nessun prodotto sincronizzato ancora.</td>
+          <td colspan="9" class="empty">Nessun prodotto sincronizzato ancora.</td>
       </tr>
     `;
 
@@ -340,6 +342,46 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           overflow-x: auto;
         }
 
+        .table-toolbar {
+          display: grid;
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+
+        .search-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+          align-items: center;
+        }
+
+        .search-input {
+          width: 100%;
+          padding: 11px 13px;
+          border-radius: 12px;
+          border: 1px solid var(--line);
+          background: var(--input-bg);
+          color: var(--ink);
+          font: inherit;
+          font-size: 12px;
+          outline: none;
+        }
+
+        .search-input::placeholder {
+          color: #7f7f89;
+        }
+
+        .search-meta {
+          display: flex;
+          justify-content: space-between;
+          gap: 12px;
+          align-items: center;
+          color: #9a9aa5;
+          font-size: 11px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
         .thumb {
           width: 54px;
           height: 54px;
@@ -349,8 +391,153 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           background: var(--input-bg);
         }
 
+        .product-row {
+          cursor: pointer;
+          transition: background 160ms ease, transform 160ms ease;
+        }
+
+        .product-row:hover {
+          background: rgba(185, 28, 28, 0.06);
+        }
+
+        .product-row:focus-visible {
+          outline: 2px solid rgba(185, 28, 28, 0.5);
+          outline-offset: -2px;
+        }
+
+        .product-row.is-active {
+          background: rgba(185, 28, 28, 0.11);
+        }
+
         .empty-thumb {
           color: var(--muted);
+        }
+
+        .drawer-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 180ms ease;
+          z-index: 40;
+        }
+
+        .drawer-backdrop.is-open {
+          opacity: 1;
+          pointer-events: auto;
+        }
+
+        .drawer {
+          position: fixed;
+          top: 0;
+          right: 0;
+          width: min(420px, calc(100vw - 28px));
+          height: 100vh;
+          background: rgba(10, 10, 14, 0.98);
+          border-left: 1px solid var(--line);
+          box-shadow: -18px 0 50px rgba(0, 0, 0, 0.35);
+          transform: translateX(105%);
+          transition: transform 220ms ease;
+          z-index: 41;
+          display: grid;
+          grid-template-rows: auto 1fr;
+        }
+
+        .drawer.is-open {
+          transform: translateX(0);
+        }
+
+        .drawer-header {
+          padding: 18px 18px 14px;
+          border-bottom: 1px solid var(--line);
+          display: flex;
+          align-items: start;
+          justify-content: space-between;
+          gap: 12px;
+        }
+
+        .drawer-title {
+          margin: 0;
+          font-family: 'Space Grotesk', 'Manrope', sans-serif;
+          font-size: 16px;
+          line-height: 1.05;
+          letter-spacing: -0.05em;
+        }
+
+        .drawer-subtitle {
+          margin: 6px 0 0;
+          color: #9a9aa5;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+        }
+
+        .drawer-close {
+          width: 34px;
+          height: 34px;
+          padding: 0;
+          border-radius: 999px;
+          display: grid;
+          place-items: center;
+          font-size: 16px;
+          line-height: 1;
+          background: linear-gradient(135deg, #27272a 0%, #111114 100%);
+        }
+
+        .drawer-body {
+          padding: 18px;
+          overflow: auto;
+          display: grid;
+          gap: 16px;
+        }
+
+        .drawer-hero {
+          display: grid;
+          gap: 12px;
+          align-items: start;
+        }
+
+        .drawer-image {
+          width: 100%;
+          aspect-ratio: 1 / 1;
+          object-fit: cover;
+          border-radius: 18px;
+          border: 1px solid var(--line);
+          background: var(--input-bg);
+        }
+
+        .drawer-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .drawer-card {
+          padding: 12px;
+          border: 1px solid var(--line);
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.02);
+        }
+
+        .drawer-card label {
+          display: block;
+          margin: 0 0 5px;
+          color: #9a9aa5;
+          font-size: 10px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+
+        .drawer-card strong {
+          font-size: 13px;
+          letter-spacing: -0.02em;
+        }
+
+        .drawer-note {
+          color: #9a9aa5;
+          font-size: 12px;
+          line-height: 1.5;
         }
 
         table {
@@ -397,6 +584,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
           button {
             width: 100%;
+          }
+
+          .drawer {
+            width: 100vw;
+          }
+
+          .drawer-grid {
+            grid-template-columns: 1fr;
           }
         }
       </style>
@@ -478,6 +673,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
           <article class="panel card">
             <h2>Prodotti sincronizzati</h2>
+            <div class="table-toolbar">
+              <div class="search-row">
+                <input id="product-search" class="search-input" type="search" placeholder="Cerca prodotto, handle, prezzo, valuta..." aria-label="Cerca prodotti sincronizzati" />
+                <button type="button" id="search-clear" class="secondary">Reset</button>
+              </div>
+              <div class="search-meta">
+                <span id="products-visible-count">${products.length} visibili</span>
+                <span>Clicca una riga per i dettagli</span>
+              </div>
+            </div>
             <div class="table-wrap">
               <table>
                 <thead>
@@ -498,10 +703,157 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             </div>
           </article>
         </section>
+        <div class="drawer-backdrop" id="product-drawer-backdrop" aria-hidden="true"></div>
+        <aside class="drawer" id="product-drawer" aria-hidden="true" aria-label="Dettagli prodotto">
+          <div class="drawer-header">
+            <div>
+              <p class="drawer-subtitle">Dettagli prodotto</p>
+              <h3 class="drawer-title" id="drawer-title">Seleziona un prodotto</h3>
+            </div>
+            <button type="button" class="drawer-close" id="drawer-close" aria-label="Chiudi dettagli">×</button>
+          </div>
+          <div class="drawer-body" id="drawer-body">
+            <p class="drawer-note">Clicca una riga della tabella per vedere immagine, handle, ID Shopify, prezzi Box/Case e timestamp dell'ultimo aggiornamento.</p>
+          </div>
+        </aside>
       </main>
       <script id="dashboard-bootstrap" type="application/json">${serializeForScript(initialDashboardPayload)}</script>
+      <script id="dashboard-products" type="application/json">${serializeForScript(dashboardProductsPayload)}</script>
       <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-      <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+      <script>
+        (function () {
+          const escapeClientHtml = function (value) {
+            return String(value || '')
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+          };
+
+          const productsNode = document.getElementById('dashboard-products');
+          const searchInput = document.getElementById('product-search');
+          const clearButton = document.getElementById('search-clear');
+          const visibleCount = document.getElementById('products-visible-count');
+          const rows = Array.from(document.querySelectorAll('.product-row'));
+          const drawer = document.getElementById('product-drawer');
+          const backdrop = document.getElementById('product-drawer-backdrop');
+          const drawerTitle = document.getElementById('drawer-title');
+          const drawerBody = document.getElementById('drawer-body');
+          const drawerClose = document.getElementById('drawer-close');
+          const products = productsNode ? JSON.parse(productsNode.textContent || '[]') : [];
+
+          function openDrawer(product) {
+            if (!product || !drawer || !backdrop || !drawerTitle || !drawerBody) {
+              return;
+            }
+
+            drawerTitle.textContent = product.title || 'Dettagli prodotto';
+            const imageMarkup = product.imageUrl
+              ? '<img class="drawer-image" src="' + product.imageUrl + '" alt="' + escapeClientHtml(product.title) + '" />'
+              : '<div class="drawer-image" style="display:grid;place-items:center;color:#9a9aa5;">Nessuna immagine</div>';
+
+            drawerBody.innerHTML = [
+              '<div class="drawer-hero">',
+              imageMarkup,
+              '<div class="drawer-grid">',
+              '<div class="drawer-card"><label>Handle</label><strong>' + escapeClientHtml(product.handle || '-') + '</strong></div>',
+              '<div class="drawer-card"><label>ID Shopify</label><strong>' + escapeClientHtml(product.shopifyProductId || '-') + '</strong></div>',
+              '<div class="drawer-card"><label>Prezzo default</label><strong>' + escapeClientHtml(product.lastPrice || '-') + '</strong></div>',
+              '<div class="drawer-card"><label>Prezzo Box</label><strong>' + escapeClientHtml(product.lastBoxPrice || '-') + '</strong></div>',
+              '<div class="drawer-card"><label>Prezzo Case</label><strong>' + escapeClientHtml(product.lastCasePrice || '-') + '</strong></div>',
+              '<div class="drawer-card"><label>Valuta</label><strong>' + escapeClientHtml(product.sourceCurrency || '-') + '</strong></div>',
+              '</div>',
+              '<div class="drawer-card">',
+              '<label>Ultimo aggiornamento</label>',
+              '<strong>' + escapeClientHtml(product.updatedAt || '-') + '</strong>',
+              '</div>',
+              '</div>'
+            ].join('');
+
+            drawer.classList.add('is-open');
+            backdrop.classList.add('is-open');
+            drawer.setAttribute('aria-hidden', 'false');
+            backdrop.setAttribute('aria-hidden', 'false');
+          }
+
+          function closeDrawer() {
+            if (!drawer || !backdrop) {
+              return;
+            }
+
+            drawer.classList.remove('is-open');
+            backdrop.classList.remove('is-open');
+            drawer.setAttribute('aria-hidden', 'true');
+            backdrop.setAttribute('aria-hidden', 'true');
+          }
+
+          function applySearch(query) {
+            const normalized = String(query || '').trim().toLowerCase();
+            let visible = 0;
+
+            rows.forEach((row) => {
+              const text = row.getAttribute('data-search') || '';
+              const matches = !normalized || text.includes(normalized);
+              row.style.display = matches ? '' : 'none';
+              if (matches) {
+                visible += 1;
+              }
+            });
+
+            if (visibleCount) {
+              visibleCount.textContent = visible + ' visibili';
+            }
+          }
+
+          rows.forEach((row) => {
+            row.addEventListener('click', () => {
+              rows.forEach((candidate) => candidate.classList.remove('is-active'));
+              row.classList.add('is-active');
+              const index = Number(row.getAttribute('data-product-index'));
+              if (!Number.isFinite(index)) {
+                return;
+              }
+              openDrawer(products[index]);
+            });
+
+            row.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                row.click();
+              }
+            });
+          });
+
+          if (searchInput) {
+            searchInput.addEventListener('input', (event) => applySearch(event.target.value));
+          }
+
+          if (clearButton && searchInput) {
+            clearButton.addEventListener('click', () => {
+              searchInput.value = '';
+              applySearch('');
+              searchInput.focus();
+            });
+          }
+
+          if (drawerClose) {
+            drawerClose.addEventListener('click', closeDrawer);
+          }
+
+          if (backdrop) {
+            backdrop.addEventListener('click', closeDrawer);
+          }
+
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+              closeDrawer();
+            }
+          });
+
+          applySearch('');
+        })();
+      </script>
       <script>
         (function () {
           const rootNode = document.getElementById('sync-react-root');
