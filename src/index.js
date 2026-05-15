@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cron = require('node-cron');
 const config = require('./config');
@@ -1648,15 +1650,16 @@ app.get(['/', '/app'], (req, res) => {
     try {
       await hydrateProductsFromShopifyIfNeeded();
       const state = stateStore.readState();
+      const effectiveSync = getEffectiveSyncRuntime();
       const flashMessage = typeof req.query.message === 'string' ? req.query.message : '';
       const flashType = typeof req.query.type === 'string' ? req.query.type : 'info';
       res.type('html').send(renderDashboard({
         state,
         flashMessage,
         flashType,
-        isSyncRunning,
-        syncStartedAt: syncRuntime.startedAt,
-        syncRuntime
+        isSyncRunning: effectiveSync.running,
+        syncStartedAt: effectiveSync.runtime.startedAt,
+        syncRuntime: effectiveSync.runtime
       }));
     } catch (error) {
       console.error('[HTTP] GET / error:', error.message);
@@ -1672,22 +1675,22 @@ app.get('/app/state', (_req, res) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
-    await hydrateProductsFromShopifyIfNeeded();
     const state = stateStore.readState();
+    const effectiveSync = getEffectiveSyncRuntime();
     res.json({
       state,
       sync: {
-        running: isSyncRunning,
-        startedAt: syncRuntime.startedAt,
-        processed: Number(syncRuntime.processed || 0),
-        scanned: Number(syncRuntime.scanned || 0),
-        synced: Number(syncRuntime.synced || 0),
-        changed: Number(syncRuntime.changed || 0),
-        unchanged: Number(syncRuntime.unchanged || 0),
-        currentProduct: syncRuntime.currentProduct || null,
-        recentProducts: Array.isArray(syncRuntime.recentProducts) ? syncRuntime.recentProducts : [],
-        skipped: Number(syncRuntime.skipped || 0),
-        errorsCount: Number(syncRuntime.errorsCount || 0)
+        running: effectiveSync.running,
+        startedAt: effectiveSync.runtime.startedAt,
+        processed: Number(effectiveSync.runtime.processed || 0),
+        scanned: Number(effectiveSync.runtime.scanned || 0),
+        synced: Number(effectiveSync.runtime.synced || 0),
+        changed: Number(effectiveSync.runtime.changed || 0),
+        unchanged: Number(effectiveSync.runtime.unchanged || 0),
+        currentProduct: effectiveSync.runtime.currentProduct || null,
+        recentProducts: Array.isArray(effectiveSync.runtime.recentProducts) ? effectiveSync.runtime.recentProducts : [],
+        skipped: Number(effectiveSync.runtime.skipped || 0),
+        errorsCount: Number(effectiveSync.runtime.errorsCount || 0)
       }
     });
   };
@@ -1882,6 +1885,22 @@ app.use((err, req, res, next) => {
 
 let isSyncRunning = false;
 let isHydratingProducts = false;
+const syncRuntimeFile = path.resolve(config.paths.dataDir, 'sync-runtime.json');
+const DEFAULT_SHARED_SYNC_RUNTIME = {
+  running: false,
+  startedAt: null,
+  trigger: null,
+  processed: 0,
+  scanned: 0,
+  synced: 0,
+  changed: 0,
+  unchanged: 0,
+  currentProduct: null,
+  recentProducts: [],
+  skipped: 0,
+  errorsCount: 0,
+  updatedAt: null
+};
 const syncRuntime = {
   startedAt: null,
   trigger: null,
@@ -1895,6 +1914,92 @@ const syncRuntime = {
   skipped: 0,
   errorsCount: 0
 };
+
+function normalizeSharedSyncRuntime(value) {
+  const payload = value && typeof value === 'object' ? value : {};
+  return {
+    ...DEFAULT_SHARED_SYNC_RUNTIME,
+    ...payload,
+    running: Boolean(payload.running),
+    processed: Number(payload.processed || 0),
+    scanned: Number(payload.scanned || 0),
+    synced: Number(payload.synced || 0),
+    changed: Number(payload.changed || 0),
+    unchanged: Number(payload.unchanged || 0),
+    skipped: Number(payload.skipped || 0),
+    errorsCount: Number(payload.errorsCount || 0),
+    currentProduct: payload.currentProduct || null,
+    recentProducts: Array.isArray(payload.recentProducts) ? payload.recentProducts : []
+  };
+}
+
+function readSharedSyncRuntime() {
+  try {
+    if (!fs.existsSync(syncRuntimeFile)) {
+      return normalizeSharedSyncRuntime(DEFAULT_SHARED_SYNC_RUNTIME);
+    }
+
+    const parsed = JSON.parse(fs.readFileSync(syncRuntimeFile, 'utf8'));
+    return normalizeSharedSyncRuntime(parsed);
+  } catch (_error) {
+    return normalizeSharedSyncRuntime(DEFAULT_SHARED_SYNC_RUNTIME);
+  }
+}
+
+function writeSharedSyncRuntime(nextRuntime) {
+  const normalized = normalizeSharedSyncRuntime(nextRuntime);
+  normalized.updatedAt = new Date().toISOString();
+
+  try {
+    const tmpFile = `${syncRuntimeFile}.tmp`;
+    fs.writeFileSync(tmpFile, JSON.stringify(normalized, null, 2), 'utf8');
+    fs.renameSync(tmpFile, syncRuntimeFile);
+  } catch (error) {
+    console.error('[SYNC] Failed to persist shared runtime:', error.message);
+  }
+}
+
+function getEffectiveSyncRuntime() {
+  const localRuntime = {
+    startedAt: syncRuntime.startedAt,
+    trigger: syncRuntime.trigger,
+    processed: Number(syncRuntime.processed || 0),
+    scanned: Number(syncRuntime.scanned || 0),
+    synced: Number(syncRuntime.synced || 0),
+    changed: Number(syncRuntime.changed || 0),
+    unchanged: Number(syncRuntime.unchanged || 0),
+    currentProduct: syncRuntime.currentProduct || null,
+    recentProducts: Array.isArray(syncRuntime.recentProducts) ? syncRuntime.recentProducts : [],
+    skipped: Number(syncRuntime.skipped || 0),
+    errorsCount: Number(syncRuntime.errorsCount || 0)
+  };
+
+  if (isSyncRunning) {
+    return { running: true, runtime: localRuntime };
+  }
+
+  const sharedRuntime = readSharedSyncRuntime();
+  if (sharedRuntime.running) {
+    return {
+      running: true,
+      runtime: {
+        startedAt: sharedRuntime.startedAt,
+        trigger: sharedRuntime.trigger,
+        processed: sharedRuntime.processed,
+        scanned: sharedRuntime.scanned,
+        synced: sharedRuntime.synced,
+        changed: sharedRuntime.changed,
+        unchanged: sharedRuntime.unchanged,
+        currentProduct: sharedRuntime.currentProduct,
+        recentProducts: sharedRuntime.recentProducts,
+        skipped: sharedRuntime.skipped,
+        errorsCount: sharedRuntime.errorsCount
+      }
+    };
+  }
+
+  return { running: false, runtime: localRuntime };
+}
 
 async function hydrateProductsFromShopifyIfNeeded() {
   if (isHydratingProducts || isSyncRunning) {
@@ -1959,6 +2064,20 @@ function startSync(trigger) {
   syncRuntime.recentProducts = [];
   syncRuntime.skipped = 0;
   syncRuntime.errorsCount = 0;
+  writeSharedSyncRuntime({
+    running: true,
+    startedAt: syncRuntime.startedAt,
+    trigger: syncRuntime.trigger,
+    processed: 0,
+    scanned: 0,
+    synced: 0,
+    changed: 0,
+    unchanged: 0,
+    currentProduct: null,
+    recentProducts: [],
+    skipped: 0,
+    errorsCount: 0
+  });
 
   setImmediate(async () => {
     try {
@@ -1979,6 +2098,20 @@ function startSync(trigger) {
           syncRuntime.recentProducts = Array.isArray(progress.recentProducts) ? progress.recentProducts : [];
           syncRuntime.skipped = Number(progress.skipped || 0);
           syncRuntime.errorsCount = Number(progress.errorsCount || 0);
+          writeSharedSyncRuntime({
+            running: true,
+            startedAt: syncRuntime.startedAt,
+            trigger: syncRuntime.trigger,
+            processed: syncRuntime.processed,
+            scanned: syncRuntime.scanned,
+            synced: syncRuntime.synced,
+            changed: syncRuntime.changed,
+            unchanged: syncRuntime.unchanged,
+            currentProduct: syncRuntime.currentProduct,
+            recentProducts: syncRuntime.recentProducts,
+            skipped: syncRuntime.skipped,
+            errorsCount: syncRuntime.errorsCount
+          });
         }
       });
       console.log('[SYNC] completed', {
@@ -2002,6 +2135,20 @@ function startSync(trigger) {
       syncRuntime.recentProducts = [];
       syncRuntime.skipped = 0;
       syncRuntime.errorsCount = 0;
+      writeSharedSyncRuntime({
+        running: false,
+        startedAt: null,
+        trigger: null,
+        processed: 0,
+        scanned: 0,
+        synced: 0,
+        changed: 0,
+        unchanged: 0,
+        currentProduct: null,
+        recentProducts: [],
+        skipped: 0,
+        errorsCount: 0
+      });
     }
   });
 
