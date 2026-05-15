@@ -180,6 +180,28 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     markupPercent
   };
 
+  const serverProgressPercent = runtime.scanned > 0
+    ? Math.min(100, Math.round((runtime.processed / runtime.scanned) * 100))
+    : 0;
+  const syncLiveFallbackMarkup = isSyncRunning
+    ? `
+      <div class="sync-live-panel" id="sync-live-fallback">
+        <p class="sync-live-title">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</p>
+        <div style="width:100%;height:10px;background:#e4e5e7;border-radius:999px;overflow:hidden;">
+          <div style="width:${serverProgressPercent}%;height:100%;background:#008060;transition:width 200ms ease;"></div>
+        </div>
+        <div class="sync-live-meta">
+          <span>Progresso: ${serverProgressPercent}%</span>
+          <span>Processati: ${Number(runtime.processed || 0)}/${Number(runtime.scanned || 0)}</span>
+          <span>Sincronizzati: ${Number(runtime.synced || 0)}</span>
+          <span>Cambiati: ${Number(runtime.changed || 0)}</span>
+          <span>Invariati: ${Number(runtime.unchanged || 0)}</span>
+          <span>Errori: ${Number(runtime.errorsCount || 0)}</span>
+        </div>
+      </div>
+    `
+    : '<div id="sync-live-fallback"></div>';
+
   return `<!doctype html>
   <html lang="it">
     <head>
@@ -334,6 +356,18 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           justify-content: flex-start;
         }
 
+        .ops-section p {
+          margin: 0;
+        }
+
+        .ops-section-auth {
+          gap: 4px;
+        }
+
+        .ops-section-auth form {
+          margin-top: 8px;
+        }
+
         .ops-section + .ops-section {
           border-top: 1px solid var(--line);
           padding-top: 18px;
@@ -384,6 +418,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           transition: none;
         }
 
+        button:disabled,
+        button[aria-disabled="true"] {
+          background: #e4e5e7;
+          border-color: #c9cccf;
+          color: #8c9196;
+          cursor: not-allowed;
+        }
+
         button:hover {
           background: #006e52;
         }
@@ -396,6 +438,18 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           background: #ffffff;
           color: #202223;
           border: 1px solid #babfc3;
+        }
+
+        .btn-with-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .btn-icon {
+          font-size: 12px;
+          line-height: 1;
         }
 
         .table-wrap {
@@ -804,19 +858,20 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         </section>
 
         <section class="sync-live-full-row">
+          ${syncLiveFallbackMarkup}
           <div id="sync-react-root"></div>
         </section>
 
         <section class="grid">
           <div class="stack">
             <article class="panel card ops-widget">
-              <section class="ops-section">
+              <section class="ops-section ops-section-auth">
                 <h2>Autorizzazione Shopify</h2>
                 <p>Stato attuale: <strong>${hasStoredInstallation ? 'autorizzato via OAuth' : 'non autorizzato via OAuth'}</strong>.</p>
                 <p>${installation ? `Token OAuth aggiornato il ${escapeHtml(formatTimestamp(installation.updatedAt))}.` : 'Serve un passaggio OAuth per ottenere il token offline dello store.'}</p>
                 <p>${hasStaticToken ? 'E presente anche un token statico nel file .env, ma il sync usera il token OAuth salvato appena disponibile.' : 'Nessun token statico configurato nel file .env.'}</p>
                 <form method="get" action="/auth/start" target="_top" id="shopify-connect-form">
-                  <button type="submit" class="${hasStoredInstallation ? 'secondary' : ''}">${hasStoredInstallation ? 'Riconnetti Shopify' : 'Connetti Shopify'}</button>
+                  <button type="submit" class="btn-with-icon ${hasStoredInstallation ? 'secondary' : ''}"><span class="btn-icon" aria-hidden="true">🔗</span>${hasStoredInstallation ? 'Riconnetti Shopify' : 'Connetti Shopify'}</button>
                 </form>
               </section>
 
@@ -825,7 +880,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 <form method="post" action="/app/settings/markup-percent">
                   <label for="markupPercent">Percentuale da applicare ai prezzi importati</label>
                   <input id="markupPercent" name="markupPercent" type="number" min="0" step="0.01" value="${escapeHtml(markupPercent)}" />
-                  <button type="submit">Salva marginalità</button>
+                  <button type="submit" class="btn-with-icon"><span class="btn-icon" aria-hidden="true">💾</span>Salva marginalità</button>
                 </form>
               </section>
 
@@ -834,12 +889,12 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 <p>Usa questo comando per forzare subito il caricamento del catalogo dal Google Sheet e aggiornare i prodotti su Shopify.</p>
                 <div id="sync-fallback-root">
                   <form method="post" action="/app/sync">
-                    <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+                    <button type="submit" class="btn-with-icon" ${isSyncRunning ? 'disabled aria-disabled="true"' : ''}><span class="btn-icon" aria-hidden="true">⟳</span>${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
                   </form>
                 </div>
                 <noscript>
                   <form method="post" action="/app/sync">
-                    <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
+                    <button type="submit" class="btn-with-icon" ${isSyncRunning ? 'disabled aria-disabled="true"' : ''}><span class="btn-icon" aria-hidden="true">⟳</span>${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
                   </form>
                 </noscript>
               </section>
@@ -1085,6 +1140,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <script>
         (function () {
           const rootNode = document.getElementById('sync-react-root');
+          const liveFallbackNode = document.getElementById('sync-live-fallback');
           const fallbackNode = document.getElementById('sync-fallback-root');
           const bootstrapNode = document.getElementById('dashboard-bootstrap');
           if (!rootNode || !bootstrapNode || !window.React || !window.ReactDOM) {
@@ -1277,7 +1333,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 onClick: onStart,
                 disabled: Boolean(sync.running),
                 style: sync.running ? { opacity: 0.7, cursor: 'not-allowed' } : undefined
-              }, sync.running ? 'Sync in corso...' : 'Avvia sync adesso'),
+              }, sync.running ? '⟳ Sync in corso...' : '⟳ Avvia sync adesso'),
               livePanel,
               completedPanel,
               message ? e('p', { key: 'message', style: { margin: 0 } }, message) : null
@@ -1286,10 +1342,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
           try {
             window.ReactDOM.createRoot(rootNode).render(e(SyncWidget));
+            if (liveFallbackNode) {
+              liveFallbackNode.style.display = 'none';
+            }
             if (fallbackNode) {
               fallbackNode.style.display = 'none';
             }
           } catch (_error) {
+            if (liveFallbackNode) {
+              liveFallbackNode.style.display = '';
+            }
             if (fallbackNode) {
               fallbackNode.style.display = '';
             }
