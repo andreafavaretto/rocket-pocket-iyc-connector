@@ -166,6 +166,7 @@ async function upsertProduct(productPayload, previousState) {
   return {
     shopifyProductId: syncedProduct.id,
     imageHash,
+    imageFileName: productPayload.image ? productPayload.image.fileName : null,
     lastPrice: (caseVariant || productPayload.variants[0]).price,
     lastCasePrice: caseVariant ? caseVariant.price : null,
     lastBoxPrice: boxVariant ? boxVariant.price : null,

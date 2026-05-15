@@ -8,6 +8,7 @@ const { runCatalogSync } = require('./services/catalogSyncService');
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
+app.use('/images', express.static(config.paths.imageDir, { maxAge: '7d' }));
 
 function escapeHtml(value) {
   return String(value || '')
@@ -27,7 +28,7 @@ function formatTimestamp(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('it-IT');
 }
 
-function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
+function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncRunning = false, syncStartedAt = null }) {
   const markupPercent = stateStore.getMarkupPercent();
   const installation = stateStore.getShopifyInstallation(config.shopify.storeDomain);
   const hasStoredInstallation = Boolean(installation && installation.adminAccessToken);
@@ -42,7 +43,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
     handle,
     title: product.title || handle,
     shopifyProductId: product.shopifyProductId || '-',
+    imageFileName: product.imageFileName || '',
     lastPrice: product.lastPrice || '-',
+    lastBoxPrice: product.lastBoxPrice || '-',
+    lastCasePrice: product.lastCasePrice || '-',
     sourceCurrency: product.sourceCurrency || '-',
     updatedAt: product.updatedAt || null
   }));
@@ -52,10 +56,13 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
         .sort((left, right) => String(left.title).localeCompare(String(right.title)))
         .map(product => `
           <tr>
+            <td>${product.imageFileName ? `<img class="thumb" src="/images/${encodeURIComponent(product.imageFileName)}" alt="${escapeHtml(product.title)}" loading="lazy" />` : '<span class="empty-thumb">-</span>'}</td>
             <td>${escapeHtml(product.title)}</td>
             <td><code>${escapeHtml(product.handle)}</code></td>
             <td>${escapeHtml(product.shopifyProductId)}</td>
             <td>${escapeHtml(product.lastPrice)}</td>
+            <td>${escapeHtml(product.lastBoxPrice)}</td>
+            <td>${escapeHtml(product.lastCasePrice)}</td>
             <td>${escapeHtml(product.sourceCurrency)}</td>
             <td>${escapeHtml(formatTimestamp(product.updatedAt))}</td>
           </tr>
@@ -63,7 +70,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
         .join('')
     : `
       <tr>
-        <td colspan="6" class="empty">Nessun prodotto sincronizzato ancora.</td>
+        <td colspan="9" class="empty">Nessun prodotto sincronizzato ancora.</td>
       </tr>
     `;
 
@@ -249,6 +256,19 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
           overflow-x: auto;
         }
 
+        .thumb {
+          width: 54px;
+          height: 54px;
+          object-fit: cover;
+          border-radius: 10px;
+          border: 1px solid var(--line);
+          background: #fff;
+        }
+
+        .empty-thumb {
+          color: var(--muted);
+        }
+
         table {
           width: 100%;
           border-collapse: collapse;
@@ -316,6 +336,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
               <p class="metric-value">${escapeHtml(formatTimestamp(lastSync && lastSync.finishedAt))}</p>
             </div>
             <div>
+              <p class="metric-label">Stato sync</p>
+              <p class="metric-value">${isSyncRunning ? `In corso (${escapeHtml(formatTimestamp(syncStartedAt))})` : 'Idle'}</p>
+            </div>
+            <div>
               <p class="metric-label">Prodotti in stato locale</p>
               <p class="metric-value">${products.length}</p>
             </div>
@@ -347,8 +371,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
               <h2>Sync manuale</h2>
               <p>Usa questo comando per forzare subito il caricamento del catalogo dal Google Sheet e aggiornare i prodotti su Shopify.</p>
               <form method="post" action="/app/sync">
-                <button type="submit">Avvia sync adesso</button>
+                <button type="submit">${isSyncRunning ? 'Sync già in corso' : 'Avvia sync adesso'}</button>
               </form>
+              ${isSyncRunning ? `<p>Un processo di sincronizzazione è già attivo dal ${escapeHtml(formatTimestamp(syncStartedAt))}.</p>` : ''}
             </article>
 
             <article class="panel card">
@@ -367,10 +392,13 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info' }) {
               <table>
                 <thead>
                   <tr>
+                    <th>Immagine</th>
                     <th>Titolo</th>
                     <th>Handle</th>
                     <th>ID Shopify</th>
-                    <th>Prezzo</th>
+                    <th>Prezzo (default)</th>
+                    <th>Prezzo Box</th>
+                    <th>Prezzo Case</th>
                     <th>Valuta</th>
                     <th>Aggiornato</th>
                   </tr>
@@ -462,7 +490,13 @@ app.get(['/', '/app'], (req, res) => {
     const state = stateStore.readState();
     const flashMessage = typeof req.query.message === 'string' ? req.query.message : '';
     const flashType = typeof req.query.type === 'string' ? req.query.type : 'info';
-    res.type('html').send(renderDashboard({ state, flashMessage, flashType }));
+    res.type('html').send(renderDashboard({
+      state,
+      flashMessage,
+      flashType,
+      isSyncRunning,
+      syncStartedAt: syncRuntime.startedAt
+    }));
   } catch (error) {
     console.error('[HTTP] GET / error:', error.message);
     res.status(500).send(`<h1>Error</h1><p>${error.message}</p>`);
@@ -601,13 +635,14 @@ app.put('/api/settings/markup-percent', requireApiKey, (req, res) => {
   res.json({ markupPercent: value });
 });
 
-app.post('/api/sync', requireApiKey, async (_req, res) => {
-  try {
-    const report = await runCatalogSync();
-    res.json({ ok: true, report });
-  } catch (error) {
-    res.status(500).json({ ok: false, error: error.message });
+app.post('/api/sync', requireApiKey, (_req, res) => {
+  const started = startSync('api');
+  if (!started) {
+    res.status(409).json({ ok: false, error: 'Sync già in corso.' });
+    return;
   }
+
+  res.status(202).json({ ok: true, message: 'Sync avviato in background.' });
 });
 
 app.post('/app/settings/markup-percent', (req, res) => {
@@ -621,13 +656,14 @@ app.post('/app/settings/markup-percent', (req, res) => {
   redirectWithMessage(res, 'success', `Marginalita aggiornata a ${parsed}%.`);
 });
 
-app.post('/app/sync', async (_req, res) => {
-  try {
-    const report = await runCatalogSync();
-    redirectWithMessage(res, 'success', `Sync completato. Sincronizzati: ${report.synced}, errori: ${report.errors.length}.`);
-  } catch (error) {
-    redirectWithMessage(res, 'error', `Sync fallito: ${error.message}`);
+app.post('/app/sync', (_req, res) => {
+  const started = startSync('dashboard');
+  if (!started) {
+    redirectWithMessage(res, 'info', 'Sync già in corso. Attendi il completamento e aggiorna la pagina.');
+    return;
   }
+
+  redirectWithMessage(res, 'success', 'Sync avviato in background. Puoi continuare a usare la dashboard.');
 });
 
 // Global error handler middleware
@@ -640,24 +676,45 @@ app.use((err, req, res, next) => {
 });
 
 let isSyncRunning = false;
+const syncRuntime = {
+  startedAt: null,
+  trigger: null
+};
 
-async function runScheduledSync() {
+function startSync(trigger) {
   if (isSyncRunning) {
-    return;
+    return false;
   }
 
   isSyncRunning = true;
-  try {
-    const report = await runCatalogSync();
-    console.log('[SYNC] completed', {
-      startedAt: report.startedAt,
-      synced: report.synced,
-      errors: report.errors.length
-    });
-  } catch (error) {
-    console.error('[SYNC] failed', error.message);
-  } finally {
-    isSyncRunning = false;
+  syncRuntime.startedAt = new Date().toISOString();
+  syncRuntime.trigger = trigger;
+
+  setImmediate(async () => {
+    try {
+      const report = await runCatalogSync();
+      console.log('[SYNC] completed', {
+        trigger,
+        startedAt: report.startedAt,
+        synced: report.synced,
+        errors: report.errors.length
+      });
+    } catch (error) {
+      console.error('[SYNC] failed', { trigger, error: error.message });
+    } finally {
+      isSyncRunning = false;
+      syncRuntime.startedAt = null;
+      syncRuntime.trigger = null;
+    }
+  });
+
+  return true;
+}
+
+async function runScheduledSync() {
+  const started = startSync('cron');
+  if (!started) {
+    console.log('[SYNC] skipped (already running)');
   }
 }
 
