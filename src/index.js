@@ -102,6 +102,14 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       ? 'Token statico configurato'
       : 'Da autorizzare';
   const lastSync = state.lastSync || null;
+  const buildParts = [];
+  if (process.env.RAILWAY_GIT_COMMIT_SHA) {
+    buildParts.push(`commit ${String(process.env.RAILWAY_GIT_COMMIT_SHA).slice(0, 7)}`);
+  }
+  if (process.env.RAILWAY_DEPLOYMENT_ID) {
+    buildParts.push(`deploy ${String(process.env.RAILWAY_DEPLOYMENT_ID).slice(0, 8)}`);
+  }
+  const buildLabel = buildParts.length ? buildParts.join(' · ') : 'build locale';
   const products = Object.entries(state.products || {}).map(([handle, product]) => ({
     handle,
     title: product.title || handle,
@@ -185,8 +193,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     : 0;
   const syncLiveFallbackMarkup = isSyncRunning
     ? `
-      <div class="sync-live-panel" id="sync-live-fallback">
-        <p class="sync-live-title">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</p>
+      <div class="sync-live-panel is-running" id="sync-live-fallback">
+        <h2 class="sync-live-title-main">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</h2>
         <div style="width:100%;height:10px;background:#e4e5e7;border-radius:999px;overflow:hidden;">
           <div style="width:${serverProgressPercent}%;height:100%;background:#008060;transition:width 200ms ease;"></div>
         </div>
@@ -317,6 +325,26 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .flash.info { color: var(--accent-strong); }
         .flash.error { color: var(--warn); border-color: rgba(143, 61, 46, 0.28); }
         .flash.success { color: var(--ok); border-color: rgba(28, 107, 73, 0.28); }
+
+        .build-badge-wrap {
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 10px;
+        }
+
+        .build-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 10px;
+          border-radius: 999px;
+          border: 1px solid var(--line);
+          background: #ffffff;
+          color: var(--muted);
+          font-size: 10px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
 
         .grid {
           display: grid;
@@ -860,6 +888,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     </head>
     <body>
       <main class="shell">
+        <div class="build-badge-wrap">
+          <span class="build-badge">Build ${escapeHtml(buildLabel)}</span>
+        </div>
         ${flashMessage ? `<div class="flash ${escapeHtml(flashType)}">${escapeHtml(flashMessage)}</div>` : ''}
         <section class="hero">
           <article class="panel hero-main">
