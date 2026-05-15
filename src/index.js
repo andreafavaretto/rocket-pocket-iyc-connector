@@ -782,7 +782,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               <p>Stato attuale: <strong>${hasStoredInstallation ? 'autorizzato via OAuth' : 'non autorizzato via OAuth'}</strong>.</p>
               <p>${installation ? `Token OAuth aggiornato il ${escapeHtml(formatTimestamp(installation.updatedAt))}.` : 'Serve un passaggio OAuth per ottenere il token offline dello store.'}</p>
               <p>${hasStaticToken ? 'E presente anche un token statico nel file .env, ma il sync usera il token OAuth salvato appena disponibile.' : 'Nessun token statico configurato nel file .env.'}</p>
-              <form method="get" action="/auth/start">
+              <form method="get" action="/auth/start" target="_top">
                 <button type="submit" class="${hasStoredInstallation ? 'secondary' : ''}">${hasStoredInstallation ? 'Riconnetti Shopify' : 'Connetti Shopify'}</button>
               </form>
             </article>
