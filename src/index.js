@@ -738,6 +738,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           padding: 12px;
           display: grid;
           gap: 10px;
+          position: relative;
+          isolation: isolate;
         }
 
         .sync-live-title {
@@ -844,26 +846,33 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           color: var(--ink);
         }
 
-        @keyframes glow-rotate {
-          0% {
-            box-shadow: 0 0 0 1px #1f6f5f, 0 0 12px 0 rgba(31, 111, 95, 0.3);
-          }
-          25% {
-            box-shadow: 0 0 0 1px #1f6f5f, 4px 0 12px 0 rgba(31, 111, 95, 0.4);
-          }
-          50% {
-            box-shadow: 0 0 0 1px #1f6f5f, 0 4px 12px 0 rgba(31, 111, 95, 0.3);
-          }
-          75% {
-            box-shadow: 0 0 0 1px #1f6f5f, -4px 0 12px 0 rgba(31, 111, 95, 0.4);
-          }
-          100% {
-            box-shadow: 0 0 0 1px #1f6f5f, 0 0 12px 0 rgba(31, 111, 95, 0.3);
+        @keyframes sync-border-rotate {
+          to {
+            transform: rotate(1turn);
           }
         }
 
         .sync-live-panel.is-running {
-          animation: glow-rotate 2.5s ease-in-out infinite;
+          border-color: #1f6f5f;
+        }
+
+        .sync-live-panel.is-running::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          border-radius: inherit;
+          padding: 1px;
+          background: conic-gradient(
+            from 0deg,
+            rgba(31, 111, 95, 0.12),
+            rgba(31, 111, 95, 0.95),
+            rgba(31, 111, 95, 0.12)
+          );
+          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+          animation: sync-border-rotate 2.2s linear infinite;
         }
 
         @media (max-width: 960px) {
