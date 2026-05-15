@@ -509,6 +509,7 @@ app.get('/auth/callback', async (req, res) => {
   const shop = String(req.query.shop || '').trim().toLowerCase();
   const code = String(req.query.code || '').trim();
   const nonce = String(req.query.state || '').trim();
+  const configuredShop = String(config.shopify.storeDomain || '').trim().toLowerCase();
   const cookies = parseCookies(req.headers.cookie || '');
   const nonceFromCookie = String(cookies.oauth_state || '').trim();
 
@@ -522,11 +523,6 @@ app.get('/auth/callback', async (req, res) => {
     return;
   }
 
-  if (shop !== config.shopify.storeDomain) {
-    redirectWithMessage(res, 'error', `Callback ricevuto per store diverso (${shop}). Store configurato: ${config.shopify.storeDomain}.`);
-    return;
-  }
-
   const pendingState = stateStore.consumePendingOAuthState(nonce);
   const hasValidStateFromStore = Boolean(pendingState && pendingState.shopDomain === shop);
   const hasValidStateFromCookie = Boolean(nonceFromCookie && nonceFromCookie === nonce);
@@ -537,6 +533,13 @@ app.get('/auth/callback', async (req, res) => {
 
   // Clear oauth state cookie after successful validation.
   res.setHeader('Set-Cookie', 'oauth_state=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Lax');
+
+  // Shopify can return callback shop values that differ from the configured primary domain
+  // (for example, additional domains linked to the same store). In personal single-store mode
+  // we still persist the token under the configured shop domain.
+  if (shop !== configuredShop) {
+    console.warn(`[AUTH] Callback shop differs from configured shop. callback=${shop} configured=${configuredShop}`);
+  }
 
   try {
     const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
@@ -556,10 +559,11 @@ app.get('/auth/callback', async (req, res) => {
       throw new Error(payload.error_description || payload.error || JSON.stringify(payload));
     }
 
-    stateStore.setShopifyInstallation(shop, {
+    stateStore.setShopifyInstallation(configuredShop, {
       adminAccessToken: payload.access_token,
       scope: payload.scope || config.shopify.accessScopes,
-      installedAt: new Date().toISOString()
+      installedAt: new Date().toISOString(),
+      callbackShopDomain: shop
     });
 
     redirectWithMessage(res, 'success', 'Store Shopify autorizzato correttamente. Ora puoi lanciare il sync.');
