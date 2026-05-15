@@ -855,26 +855,51 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .sync-live-panel.is-running {
-          border-color: #1f6f5f;
+          border-color: rgba(31, 111, 95, 0.35);
         }
 
         .sync-live-panel.is-running::before {
           content: '';
           position: absolute;
-          inset: 0;
+          inset: -1px;
           border-radius: inherit;
           padding: 1px;
           background: conic-gradient(
             from 0deg,
-            rgba(31, 111, 95, 0.12),
-            rgba(31, 111, 95, 0.95),
-            rgba(31, 111, 95, 0.12)
+            rgba(31, 111, 95, 0) 0deg,
+            rgba(31, 111, 95, 0) 275deg,
+            rgba(31, 111, 95, 0.35) 304deg,
+            rgba(31, 111, 95, 0.95) 328deg,
+            rgba(31, 111, 95, 0) 360deg
           );
           -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
           -webkit-mask-composite: xor;
           mask-composite: exclude;
           pointer-events: none;
-          animation: sync-border-rotate 2.2s linear infinite;
+          animation: sync-border-rotate 1.8s linear infinite;
+        }
+
+        .sync-live-panel.is-running::after {
+          content: '';
+          position: absolute;
+          inset: -2px;
+          border-radius: inherit;
+          padding: 1px;
+          background: conic-gradient(
+            from 0deg,
+            rgba(31, 111, 95, 0) 0deg,
+            rgba(31, 111, 95, 0) 275deg,
+            rgba(31, 111, 95, 0.22) 304deg,
+            rgba(31, 111, 95, 0.6) 328deg,
+            rgba(31, 111, 95, 0) 360deg
+          );
+          -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          pointer-events: none;
+          filter: blur(2px);
+          opacity: 0.95;
+          animation: sync-border-rotate 1.8s linear infinite;
         }
 
         @media (max-width: 960px) {
