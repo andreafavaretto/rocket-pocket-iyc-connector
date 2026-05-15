@@ -964,10 +964,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .sse-lab-title {
           margin: 0;
-          color: #0d5d3d;
-          font-size: 13px;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
+          color: var(--ink);
+          font-size: 15px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
         }
 
         .sse-lab-chip {
@@ -1585,7 +1585,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
             sseLabNode.innerHTML = [
               '<div class="sse-lab-head">',
-              '<p class="sse-lab-title">Widget sperimentale solo SSE</p>',
+              '<p class="sse-lab-title">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</p>',
               '<span class="sse-lab-chip">' + escapeHtml(pulseLabel) + '</span>',
               '</div>',
               '<p class="sse-lab-copy">Timeline live separata dal widget React, pensata per confrontare la reattività del canale SSE puro.</p>',
@@ -2246,7 +2246,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
             widgetNode.innerHTML = [
               '<div class="sse-lab-head">',
-              '<p class="sse-lab-title">Widget sperimentale solo SSE</p>',
+              '<p class="sse-lab-title">Sto sincronizzando i prodotti con gli ultimi prezzi disponibili</p>',
               '<span class="sse-lab-chip">SSE attivo · stream in tempo reale</span>',
               '</div>',
               '<p class="sse-lab-copy">Aggiornamento live forzato durante sync attivo.</p>',
