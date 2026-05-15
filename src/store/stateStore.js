@@ -15,46 +15,64 @@ const DEFAULT_STATE = {
 };
 
 function ensureStateFile() {
-  const dir = path.dirname(config.paths.stateFile);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+  try {
+    const dir = path.dirname(config.paths.stateFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
 
-  if (!fs.existsSync(config.paths.stateFile)) {
-    fs.writeFileSync(config.paths.stateFile, JSON.stringify(DEFAULT_STATE, null, 2), 'utf8');
+    if (!fs.existsSync(config.paths.stateFile)) {
+      fs.writeFileSync(config.paths.stateFile, JSON.stringify(DEFAULT_STATE, null, 2), 'utf8');
+    }
+  } catch (error) {
+    console.error('[STATE] Failed to ensure state file:', error.message);
+    throw error;
   }
 }
 
 function readState() {
-  ensureStateFile();
-  const raw = fs.readFileSync(config.paths.stateFile, 'utf8');
-  const parsed = JSON.parse(raw);
+  try {
+    ensureStateFile();
+    const raw = fs.readFileSync(config.paths.stateFile, 'utf8');
+    const parsed = JSON.parse(raw);
 
-  return {
-    ...DEFAULT_STATE,
-    ...parsed,
-    settings: {
-      ...DEFAULT_STATE.settings,
-      ...(parsed.settings || {})
-    },
-    shopifyAuth: {
-      ...DEFAULT_STATE.shopifyAuth,
-      ...(parsed.shopifyAuth || {}),
-      installations: {
-        ...DEFAULT_STATE.shopifyAuth.installations,
-        ...((parsed.shopifyAuth && parsed.shopifyAuth.installations) || {})
+    return {
+      ...DEFAULT_STATE,
+      ...parsed,
+      settings: {
+        ...DEFAULT_STATE.settings,
+        ...(parsed.settings || {})
       },
-      pendingStates: {
-        ...DEFAULT_STATE.shopifyAuth.pendingStates,
-        ...((parsed.shopifyAuth && parsed.shopifyAuth.pendingStates) || {})
-      }
-    },
-    products: parsed.products || {}
-  };
+      shopifyAuth: {
+        ...DEFAULT_STATE.shopifyAuth,
+        ...(parsed.shopifyAuth || {}),
+        installations: {
+          ...DEFAULT_STATE.shopifyAuth.installations,
+          ...((parsed.shopifyAuth && parsed.shopifyAuth.installations) || {})
+        },
+        pendingStates: {
+          ...DEFAULT_STATE.shopifyAuth.pendingStates,
+          ...((parsed.shopifyAuth && parsed.shopifyAuth.pendingStates) || {})
+        }
+      },
+      products: parsed.products || {}
+    };
+  } catch (error) {
+    console.error('[STATE] Failed to read state, returning defaults:', error.message);
+    return DEFAULT_STATE;
+  }
 }
 
 function writeState(nextState) {
-  fs.writeFileSync(config.paths.stateFile, JSON.stringify(nextState, null, 2), 'utf8');
+  try {
+    const dir = path.dirname(config.paths.stateFile);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(config.paths.stateFile, JSON.stringify(nextState, null, 2), 'utf8');
+  } catch (error) {
+    console.error('[STATE] Failed to write state:', error.message);
+  }
 }
 
 function getMarkupPercent() {

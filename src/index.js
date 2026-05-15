@@ -598,27 +598,42 @@ async function runScheduledSync() {
 }
 
 function startCron() {
-  cron.schedule(config.sync.cron, runScheduledSync, { timezone: 'UTC' });
-  console.log(`[CRON] Scheduled with pattern ${config.sync.cron}`);
+  try {
+    cron.schedule(config.sync.cron, runScheduledSync, { timezone: 'UTC' });
+    console.log(`[CRON] Scheduled with pattern ${config.sync.cron}`);
+  } catch (error) {
+    console.error('[CRON] Failed to schedule:', error.message);
+  }
 }
 
 async function bootstrap() {
   const syncOnce = process.argv.includes('--sync-once');
 
   if (syncOnce) {
-    const report = await runCatalogSync();
-    console.log(JSON.stringify(report, null, 2));
-    process.exit(0);
+    try {
+      const report = await runCatalogSync();
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    } catch (error) {
+      console.error('[SYNC] One-time sync failed:', error.message);
+      process.exit(1);
+    }
   }
 
+  // Start HTTP server
   app.listen(config.server.port, () => {
     console.log(`[HTTP] Listening on port ${config.server.port}`);
+    
+    // Start cron after server is up
+    setImmediate(() => {
+      startCron();
+    });
+  }).on('error', (error) => {
+    console.error('[HTTP] Server error:', error.message);
   });
-
-  startCron();
 }
 
 bootstrap().catch(error => {
-  console.error('[BOOT] Fatal error', error);
+  console.error('[BOOT] Fatal error', error.message);
   process.exit(1);
 });
