@@ -4,6 +4,21 @@ const { loadCatalog } = require('./googleSheetsService');
 const shopify = require('./shopifyService');
 const { slugify, parseMoney, applyMarkup } = require('../utils/text');
 
+function parseUnitsPerCase(value) {
+  const cleaned = String(value || '').trim();
+  const match = cleaned.match(/(\d+(?:[.,]\d+)?)/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number.parseFloat(match[1].replace(',', '.'));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeVariantKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function pickPriceForCurrency(prices, preferredCurrency) {
   if (!Array.isArray(prices) || !prices.length) {
     return null;
@@ -29,12 +44,39 @@ function ensureProductPayload(product, markupPercent) {
     return null;
   }
 
-  const parsed = parseMoney(selectedPrice.casePrice);
-  if (!parsed) {
+  const parsedCasePrice = parseMoney(selectedPrice.casePrice);
+  if (!parsedCasePrice) {
     return null;
   }
 
-  const finalPrice = applyMarkup(parsed.amount, markupPercent);
+  const unitsPerCase = parseUnitsPerCase(product.unitsPerCase);
+  const parsedUnitPrice = parseMoney(selectedPrice.unitPrice);
+  const computedUnitAmount = unitsPerCase ? parsedCasePrice.amount / unitsPerCase : null;
+  const unitAmount = parsedUnitPrice
+    ? parsedUnitPrice.amount
+    : Number.isFinite(computedUnitAmount)
+      ? computedUnitAmount
+      : null;
+
+  const variants = [];
+
+  if (Number.isFinite(unitAmount) && unitAmount > 0) {
+    variants.push({
+      title: 'Box',
+      price: applyMarkup(unitAmount, markupPercent).toFixed(2),
+      sku: `${handle.toUpperCase()}-BOX`
+    });
+  }
+
+  const caseTitle = unitsPerCase
+    ? `Case (${Number.isInteger(unitsPerCase) ? unitsPerCase : unitsPerCase.toFixed(2)} Box)`
+    : 'Case';
+
+  variants.push({
+    title: caseTitle,
+    price: applyMarkup(parsedCasePrice.amount, markupPercent).toFixed(2),
+    sku: `${handle.toUpperCase()}-CASE`
+  });
 
   return {
     handle,
@@ -42,9 +84,9 @@ function ensureProductPayload(product, markupPercent) {
     body_html: product.details || '',
     vendor: config.shopify.vendor,
     tags: [config.shopify.catalogTag].filter(Boolean).join(','),
-    variantPrice: finalPrice.toFixed(2),
-    variantSku: handle.toUpperCase(),
+    variants,
     image: product.image || null,
+    unitsPerCase,
     sourceCurrency: selectedPrice.currency
   };
 }
@@ -60,35 +102,52 @@ async function upsertProduct(productPayload, previousState) {
       handle: productPayload.handle,
       vendor: productPayload.vendor,
       tags: productPayload.tags,
-      status: 'active',
-      variants: [
+      options: [
         {
-          price: productPayload.variantPrice,
-          sku: productPayload.variantSku,
-          inventory_management: null,
-          inventory_policy: 'continue'
+          name: 'Formato'
         }
-      ]
+      ],
+      status: 'active',
+      variants: productPayload.variants.map(variant => ({
+        option1: variant.title,
+        price: variant.price,
+        sku: variant.sku,
+        inventory_management: null,
+        inventory_policy: 'continue'
+      }))
     };
 
     syncedProduct = await shopify.createProduct(createPayload);
   } else {
-    const firstVariant = existing.variants && existing.variants.length ? existing.variants[0] : null;
+    const existingVariantsByKey = new Map(
+      (existing.variants || []).map(variant => [
+        normalizeVariantKey(variant.option1 || variant.title),
+        variant
+      ])
+    );
+
     const updatePayload = {
       id: existing.id,
       title: productPayload.title,
       body_html: productPayload.body_html,
       vendor: productPayload.vendor,
       tags: productPayload.tags,
-      variants: firstVariant
-        ? [
-            {
-              id: firstVariant.id,
-              price: productPayload.variantPrice,
-              sku: productPayload.variantSku
-            }
-          ]
-        : undefined
+      options: [
+        {
+          name: 'Formato'
+        }
+      ],
+      variants: productPayload.variants.map(variant => {
+        const current = existingVariantsByKey.get(normalizeVariantKey(variant.title));
+        return {
+          ...(current && current.id ? { id: current.id } : {}),
+          option1: variant.title,
+          price: variant.price,
+          sku: variant.sku,
+          inventory_management: null,
+          inventory_policy: 'continue'
+        };
+      })
     };
 
     syncedProduct = await shopify.updateProduct(existing.id, updatePayload);
@@ -101,10 +160,15 @@ async function upsertProduct(productPayload, previousState) {
     await shopify.addOrReplaceProductImage(syncedProduct.id, productPayload.image);
   }
 
+  const caseVariant = productPayload.variants.find(variant => normalizeVariantKey(variant.title).startsWith('case'));
+  const boxVariant = productPayload.variants.find(variant => normalizeVariantKey(variant.title) === 'box');
+
   return {
     shopifyProductId: syncedProduct.id,
     imageHash,
-    lastPrice: productPayload.variantPrice,
+    lastPrice: (caseVariant || productPayload.variants[0]).price,
+    lastCasePrice: caseVariant ? caseVariant.price : null,
+    lastBoxPrice: boxVariant ? boxVariant.price : null,
     sourceCurrency: productPayload.sourceCurrency
   };
 }
