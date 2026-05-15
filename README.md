@@ -49,6 +49,7 @@ After the first Railway deploy, configure Shopify app URLs:
 1. Copy your public Railway domain, for example `https://your-app.up.railway.app`.
 2. Update `shopify.app.toml`:
    - `application_url = "https://your-app.up.railway.app"`
+   - `embedded = true`
    - `redirect_urls = [ "https://your-app.up.railway.app/auth/callback" ]`
 3. Release the new app config:
 

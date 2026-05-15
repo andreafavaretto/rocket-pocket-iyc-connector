@@ -4,10 +4,28 @@ const cron = require('node-cron');
 const config = require('./config');
 const stateStore = require('./store/stateStore');
 const { runCatalogSync } = require('./services/catalogSyncService');
+const shopify = require('./services/shopifyService');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false }));
+
+app.use((req, res, next) => {
+  const configuredShop = String(config.shopify.storeDomain || '').trim().toLowerCase();
+  const queryShop = String(req.query && req.query.shop ? req.query.shop : '').trim().toLowerCase();
+  const shops = [configuredShop, queryShop].filter(shop => /^[a-z0-9][a-z0-9-]*\.myshopify\.com$/i.test(shop));
+
+  const frameAncestors = new Set([
+    "'self'",
+    'https://admin.shopify.com',
+    ...shops.map(shop => `https://${shop}`)
+  ]);
+
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Content-Security-Policy', `frame-ancestors ${Array.from(frameAncestors).join(' ')};`);
+  next();
+});
+
 app.use('/images', express.static(config.paths.imageDir, { maxAge: '7d' }));
 
 function escapeHtml(value) {
@@ -32,6 +50,47 @@ function serializeForScript(value) {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+function normalizeVariantKey(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function hasCatalogTag(tags) {
+  const expected = String(config.shopify.catalogTag || '').trim().toLowerCase();
+  if (!expected) {
+    return true;
+  }
+
+  return String(tags || '')
+    .split(',')
+    .map(tag => tag.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(expected);
+}
+
+function productStateFromShopify(product, markupPercent) {
+  const variants = Array.isArray(product.variants) ? product.variants : [];
+  const caseVariant = variants.find(variant => normalizeVariantKey(variant.option1 || variant.title).startsWith('case'));
+  const boxVariant = variants.find(variant => normalizeVariantKey(variant.option1 || variant.title) === 'box');
+  const selected = caseVariant || variants[0] || null;
+  const imageUrl = Array.isArray(product.images) && product.images.length
+    ? String(product.images[0].src || '').trim()
+    : '';
+
+  return {
+    title: product.title || product.handle || String(product.id || ''),
+    shopifyProductId: product.id || '-',
+    imageFileName: null,
+    shopifyImageUrl: imageUrl,
+    lastPrice: selected && selected.price ? String(selected.price) : '-',
+    lastCasePrice: caseVariant && caseVariant.price ? String(caseVariant.price) : null,
+    lastBoxPrice: boxVariant && boxVariant.price ? String(boxVariant.price) : null,
+    sourceCurrency: '-',
+    pricingByCurrency: [],
+    markupPercentApplied: Number(markupPercent || 0),
+    updatedAt: product.updated_at || new Date().toISOString()
+  };
+}
+
 function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncRunning = false, syncStartedAt = null, syncRuntime = null }) {
   const markupPercent = stateStore.getMarkupPercent();
   const installation = stateStore.getShopifyInstallation(config.shopify.storeDomain);
@@ -48,7 +107,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     title: product.title || handle,
     shopifyProductId: product.shopifyProductId || '-',
     imageFileName: product.imageFileName || '',
-    imageUrl: product.imageFileName ? `/images/${encodeURIComponent(product.imageFileName)}` : '',
+    imageUrl: product.imageFileName
+      ? `/images/${encodeURIComponent(product.imageFileName)}`
+      : String(product.shopifyImageUrl || '').trim(),
     lastPrice: product.lastPrice || '-',
     lastBoxPrice: product.lastBoxPrice || '-',
     lastCasePrice: product.lastCasePrice || '-',
@@ -94,6 +155,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
     processed: 0,
     scanned: 0,
     synced: 0,
+    changed: 0,
+    unchanged: 0,
+    currentProduct: null,
+    recentProducts: [],
     skipped: 0,
     errorsCount: 0
   };
@@ -104,9 +169,15 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       processed: Number(runtime.processed || 0),
       scanned: Number(runtime.scanned || 0),
       synced: Number(runtime.synced || 0),
+      changed: Number(runtime.changed || 0),
+      unchanged: Number(runtime.unchanged || 0),
+      currentProduct: runtime.currentProduct || null,
+      recentProducts: Array.isArray(runtime.recentProducts) ? runtime.recentProducts : [],
       skipped: Number(runtime.skipped || 0),
       errorsCount: Number(runtime.errorsCount || 0)
-    }
+    },
+    lastSync,
+    markupPercent
   };
 
   return `<!doctype html>
@@ -588,6 +659,75 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           text-align: center;
         }
 
+        .sync-live-panel {
+          border: 1px solid var(--line);
+          background: rgba(16, 16, 20, 0.9);
+          border-radius: 14px;
+          padding: 12px;
+          display: grid;
+          gap: 10px;
+        }
+
+        .sync-live-title {
+          margin: 0;
+          color: #f0f0f7;
+          font-size: 12px;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+        }
+
+        .sync-current-row {
+          display: grid;
+          grid-template-columns: 44px minmax(0, 1fr);
+          gap: 10px;
+          align-items: center;
+        }
+
+        .sync-current-thumb {
+          width: 44px;
+          height: 44px;
+          border-radius: 10px;
+          object-fit: cover;
+          border: 1px solid var(--line);
+          background: var(--input-bg);
+        }
+
+        .sync-current-text {
+          margin: 0;
+          color: #e6e6ee;
+          font-size: 12px;
+          line-height: 1.4;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .sync-live-meta {
+          color: #a1a1ad;
+          font-size: 11px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          display: flex;
+          gap: 10px;
+          flex-wrap: wrap;
+        }
+
+        .sync-live-list {
+          margin: 0;
+          padding-left: 18px;
+          color: #d7d7e1;
+          font-size: 11px;
+          display: grid;
+          gap: 4px;
+          max-height: 140px;
+          overflow: auto;
+        }
+
+        .sync-live-actions {
+          display: flex;
+          justify-content: flex-end;
+        }
+
         table {
           width: 100%;
           border-collapse: collapse;
@@ -950,9 +1090,13 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
           function SyncWidget() {
             const initialSync = bootstrap.sync || {};
+            const initialLastSync = bootstrap.lastSync || null;
             const [sync, setSync] = window.React.useState(initialSync);
+            const [lastSyncReport, setLastSyncReport] = window.React.useState(initialLastSync);
             const [message, setMessage] = window.React.useState('');
             const [wasRunning, setWasRunning] = window.React.useState(Boolean(initialSync.running));
+            const [showLastReport, setShowLastReport] = window.React.useState(Boolean(initialLastSync));
+            const completedSyncRef = window.React.useRef(initialLastSync && initialLastSync.finishedAt ? initialLastSync.finishedAt : '');
 
             const refreshStatus = window.React.useCallback(async function () {
               try {
@@ -967,6 +1111,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                   return;
                 }
 
+                const nextLastSync = payload && payload.state ? payload.state.lastSync : null;
+
                 setSync(nextSync);
 
                 if (nextSync.running) {
@@ -974,7 +1120,17 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 }
 
                 if (!nextSync.running && wasRunning) {
-                  window.location.reload();
+                  setWasRunning(false);
+
+                  if (nextLastSync && nextLastSync.finishedAt) {
+                    setLastSyncReport(nextLastSync);
+
+                    if (completedSyncRef.current !== nextLastSync.finishedAt) {
+                      completedSyncRef.current = nextLastSync.finishedAt;
+                      setShowLastReport(true);
+                      setMessage('Sync completato. Dati aggiornati.');
+                    }
+                  }
                 }
               } catch (_error) {
                 // Ignore transient polling errors.
@@ -989,6 +1145,16 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             const progressPercent = sync.scanned > 0
               ? Math.min(100, Math.round((sync.processed / sync.scanned) * 100))
               : 0;
+
+            const currentProduct = sync && sync.currentProduct ? sync.currentProduct : null;
+            const recentProducts = Array.isArray(sync.recentProducts) ? sync.recentProducts : [];
+            const changedProducts = lastSyncReport && Array.isArray(lastSyncReport.changedProducts)
+              ? lastSyncReport.changedProducts
+              : [];
+
+            const dismissLastReport = function () {
+              setShowLastReport(false);
+            };
 
             const onStart = async function () {
               setMessage('Avvio sync...');
@@ -1010,6 +1176,94 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
               }
             };
 
+            const livePanel = sync.running
+              ? e('div', { key: 'live-panel', className: 'sync-live-panel' }, [
+                  e('p', { key: 'live-title', className: 'sync-live-title' },
+                    'Sto sincronizzando i prodotti con gli ultimi prezzi disponibili'
+                  ),
+                  currentProduct
+                    ? e('div', { key: 'current-row', className: 'sync-current-row' }, [
+                        currentProduct.imageUrl
+                          ? e('img', {
+                              key: 'current-thumb',
+                              className: 'sync-current-thumb',
+                              src: currentProduct.imageUrl,
+                              alt: currentProduct.title || 'Prodotto in sync'
+                            })
+                          : e('div', {
+                              key: 'current-thumb-empty',
+                              className: 'sync-current-thumb',
+                              style: { display: 'grid', placeItems: 'center', color: '#8f8f99', fontSize: '10px' }
+                            }, 'N/A'),
+                        e('p', { key: 'current-text', className: 'sync-current-text' },
+                          'Sincronizzo ' + (currentProduct.title || 'prodotto') + '... ' + (currentProduct.index || 0) + '/' + (currentProduct.total || sync.scanned || 0)
+                        )
+                      ])
+                    : null,
+                  e('div', {
+                    key: 'bar-bg',
+                    style: {
+                      width: '100%',
+                      height: '10px',
+                      background: '#efe6d4',
+                      borderRadius: '999px',
+                      overflow: 'hidden'
+                    }
+                  }, e('div', {
+                    style: {
+                      width: progressPercent + '%',
+                      height: '100%',
+                      background: '#1f6f5f',
+                      transition: 'width 200ms ease'
+                    }
+                  })),
+                  e('div', { key: 'live-meta', className: 'sync-live-meta' }, [
+                    e('span', { key: 'meta-1' }, 'Progresso: ' + progressPercent + '%'),
+                    e('span', { key: 'meta-2' }, 'Processati: ' + (sync.processed || 0) + '/' + (sync.scanned || 0)),
+                    e('span', { key: 'meta-3' }, 'Cambiati: ' + (sync.changed || 0)),
+                    e('span', { key: 'meta-4' }, 'Invariati: ' + (sync.unchanged || 0)),
+                    e('span', { key: 'meta-5' }, 'Errori: ' + (sync.errorsCount || 0))
+                  ]),
+                  recentProducts.length
+                    ? e('ul', { key: 'recent-list', className: 'sync-live-list' },
+                        recentProducts.slice(0, 8).map(function (item, index) {
+                          const name = item && item.title ? item.title : 'Prodotto';
+                          const status = item && item.status ? ' [' + item.status + ']' : '';
+                          return e('li', { key: 'recent-' + index }, name + status);
+                        })
+                      )
+                    : null
+                ])
+              : null;
+
+            const completedPanel = (!sync.running && showLastReport && lastSyncReport)
+              ? e('div', { key: 'completed-panel', className: 'sync-live-panel' }, [
+                  e('p', { key: 'completed-title', className: 'sync-live-title' }, 'Sync completato'),
+                  e('div', { key: 'completed-meta', className: 'sync-live-meta' }, [
+                    e('span', { key: 'cm-1' }, 'Sincronizzati: ' + (lastSyncReport.synced || 0)),
+                    e('span', { key: 'cm-2' }, 'Cambiati: ' + (lastSyncReport.changed || 0)),
+                    e('span', { key: 'cm-3' }, 'Invariati: ' + (lastSyncReport.unchanged || 0)),
+                    e('span', { key: 'cm-4' }, 'Errori: ' + ((lastSyncReport.errors && lastSyncReport.errors.length) || 0))
+                  ]),
+                  changedProducts.length
+                    ? e('ul', { key: 'completed-list', className: 'sync-live-list' },
+                        changedProducts.slice(0, 20).map(function (item, index) {
+                          const label = item && item.title ? item.title : (item && item.handle ? item.handle : 'Prodotto');
+                          return e('li', { key: 'changed-' + index }, label);
+                        })
+                      )
+                    : e('p', { key: 'completed-empty', className: 'sync-current-text' }, 'Nessun prodotto modificato in quest\'ultimo sync.'),
+                  e('div', { key: 'completed-actions', className: 'sync-live-actions' }, [
+                    e('button', {
+                      key: 'completed-dismiss',
+                      type: 'button',
+                      className: 'secondary',
+                      onClick: dismissLastReport
+                    }, 'Chiudi riepilogo')
+                  ])
+                ])
+              : null;
+
             return e('div', { style: { display: 'grid', gap: '12px' } }, [
               e('button', {
                 key: 'button',
@@ -1018,31 +1272,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
                 disabled: Boolean(sync.running),
                 style: sync.running ? { opacity: 0.7, cursor: 'not-allowed' } : undefined
               }, sync.running ? 'Sync in corso...' : 'Avvia sync adesso'),
-              sync.running ? e('div', { key: 'progress-wrap', style: { display: 'grid', gap: '8px' } }, [
-                e('div', {
-                  key: 'bar-bg',
-                  style: {
-                    width: '100%',
-                    height: '10px',
-                    background: '#efe6d4',
-                    borderRadius: '999px',
-                    overflow: 'hidden'
-                  }
-                }, e('div', {
-                  style: {
-                    width: progressPercent + '%',
-                    height: '100%',
-                    background: '#1f6f5f',
-                    transition: 'width 200ms ease'
-                  }
-                })),
-                e('p', { key: 'progress-text', style: { margin: 0 } },
-                  'Progresso: ' + progressPercent + '% (' + (sync.processed || 0) + '/' + (sync.scanned || 0) + ')'
-                ),
-                e('p', { key: 'progress-sub', style: { margin: 0 } },
-                  'Sincronizzati: ' + (sync.synced || 0) + ' | Saltati: ' + (sync.skipped || 0) + ' | Errori: ' + (sync.errorsCount || 0)
-                )
-              ]) : null,
+              livePanel,
+              completedPanel,
               message ? e('p', { key: 'message', style: { margin: 0 } }, message) : null
             ]);
           }
@@ -1136,37 +1367,54 @@ function requireApiKey(req, res, next) {
 }
 
 app.get(['/', '/app'], (req, res) => {
-  try {
-    const state = stateStore.readState();
-    const flashMessage = typeof req.query.message === 'string' ? req.query.message : '';
-    const flashType = typeof req.query.type === 'string' ? req.query.type : 'info';
-    res.type('html').send(renderDashboard({
-      state,
-      flashMessage,
-      flashType,
-      isSyncRunning,
-      syncStartedAt: syncRuntime.startedAt,
-      syncRuntime
-    }));
-  } catch (error) {
-    console.error('[HTTP] GET / error:', error.message);
-    res.status(500).send(`<h1>Error</h1><p>${error.message}</p>`);
-  }
+  const render = async () => {
+    try {
+      await hydrateProductsFromShopifyIfNeeded();
+      const state = stateStore.readState();
+      const flashMessage = typeof req.query.message === 'string' ? req.query.message : '';
+      const flashType = typeof req.query.type === 'string' ? req.query.type : 'info';
+      res.type('html').send(renderDashboard({
+        state,
+        flashMessage,
+        flashType,
+        isSyncRunning,
+        syncStartedAt: syncRuntime.startedAt,
+        syncRuntime
+      }));
+    } catch (error) {
+      console.error('[HTTP] GET / error:', error.message);
+      res.status(500).send(`<h1>Error</h1><p>${error.message}</p>`);
+    }
+  };
+
+  render();
 });
 
 app.get('/app/state', (_req, res) => {
-  const state = stateStore.readState();
-  res.json({
-    state,
-    sync: {
-      running: isSyncRunning,
-      startedAt: syncRuntime.startedAt,
-      processed: Number(syncRuntime.processed || 0),
-      scanned: Number(syncRuntime.scanned || 0),
-      synced: Number(syncRuntime.synced || 0),
-      skipped: Number(syncRuntime.skipped || 0),
-      errorsCount: Number(syncRuntime.errorsCount || 0)
-    }
+  const sendState = async () => {
+    await hydrateProductsFromShopifyIfNeeded();
+    const state = stateStore.readState();
+    res.json({
+      state,
+      sync: {
+        running: isSyncRunning,
+        startedAt: syncRuntime.startedAt,
+        processed: Number(syncRuntime.processed || 0),
+        scanned: Number(syncRuntime.scanned || 0),
+        synced: Number(syncRuntime.synced || 0),
+        changed: Number(syncRuntime.changed || 0),
+        unchanged: Number(syncRuntime.unchanged || 0),
+        currentProduct: syncRuntime.currentProduct || null,
+        recentProducts: Array.isArray(syncRuntime.recentProducts) ? syncRuntime.recentProducts : [],
+        skipped: Number(syncRuntime.skipped || 0),
+        errorsCount: Number(syncRuntime.errorsCount || 0)
+      }
+    });
+  };
+
+  sendState().catch(error => {
+    console.error('[HTTP] GET /app/state error:', error.message);
+    res.status(500).json({ error: 'Internal Server Error', message: error.message });
   });
 });
 
@@ -1353,15 +1601,66 @@ app.use((err, req, res, next) => {
 });
 
 let isSyncRunning = false;
+let isHydratingProducts = false;
 const syncRuntime = {
   startedAt: null,
   trigger: null,
   processed: 0,
   scanned: 0,
   synced: 0,
+  changed: 0,
+  unchanged: 0,
+  currentProduct: null,
+  recentProducts: [],
   skipped: 0,
   errorsCount: 0
 };
+
+async function hydrateProductsFromShopifyIfNeeded() {
+  if (isHydratingProducts || isSyncRunning) {
+    return;
+  }
+
+  const state = stateStore.readState();
+  if (Object.keys(state.products || {}).length > 0) {
+    return;
+  }
+
+  isHydratingProducts = true;
+  try {
+    const remoteProducts = await shopify.listAllProducts();
+    const filteredProducts = remoteProducts.filter(product => hasCatalogTag(product.tags));
+
+    if (!filteredProducts.length) {
+      return;
+    }
+
+    const nextState = stateStore.readState();
+    if (Object.keys(nextState.products || {}).length > 0) {
+      return;
+    }
+
+    const markupPercent = Number(nextState.settings && nextState.settings.markupPercent
+      ? nextState.settings.markupPercent
+      : stateStore.getMarkupPercent());
+
+    filteredProducts.forEach((product) => {
+      const handle = String(product.handle || '').trim();
+      if (!handle) {
+        return;
+      }
+
+      nextState.products[handle] = productStateFromShopify(product, markupPercent);
+    });
+
+    stateStore.writeState(nextState);
+    console.log(`[HYDRATE] Restored ${Object.keys(nextState.products).length} products from Shopify fallback.`);
+  } catch (error) {
+    console.error('[HYDRATE] Failed to restore products from Shopify:', error.message);
+  } finally {
+    isHydratingProducts = false;
+  }
+}
 
 function startSync(trigger) {
   if (isSyncRunning) {
@@ -1374,6 +1673,10 @@ function startSync(trigger) {
   syncRuntime.processed = 0;
   syncRuntime.scanned = 0;
   syncRuntime.synced = 0;
+  syncRuntime.changed = 0;
+  syncRuntime.unchanged = 0;
+  syncRuntime.currentProduct = null;
+  syncRuntime.recentProducts = [];
   syncRuntime.skipped = 0;
   syncRuntime.errorsCount = 0;
 
@@ -1384,6 +1687,10 @@ function startSync(trigger) {
           syncRuntime.processed = Number(progress.processed || 0);
           syncRuntime.scanned = Number(progress.scanned || 0);
           syncRuntime.synced = Number(progress.synced || 0);
+          syncRuntime.changed = Number(progress.changed || 0);
+          syncRuntime.unchanged = Number(progress.unchanged || 0);
+          syncRuntime.currentProduct = progress.currentProduct || null;
+          syncRuntime.recentProducts = Array.isArray(progress.recentProducts) ? progress.recentProducts : [];
           syncRuntime.skipped = Number(progress.skipped || 0);
           syncRuntime.errorsCount = Number(progress.errorsCount || 0);
         }
@@ -1403,6 +1710,10 @@ function startSync(trigger) {
       syncRuntime.processed = 0;
       syncRuntime.scanned = 0;
       syncRuntime.synced = 0;
+      syncRuntime.changed = 0;
+      syncRuntime.unchanged = 0;
+      syncRuntime.currentProduct = null;
+      syncRuntime.recentProducts = [];
       syncRuntime.skipped = 0;
       syncRuntime.errorsCount = 0;
     }

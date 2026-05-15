@@ -95,6 +95,12 @@ function formatMoney(symbol, amount) {
   return normalizedSymbol ? `${normalizedSymbol}${amount.toFixed(2)}` : amount.toFixed(2);
 }
 
+function areEqualPricingRows(left, right) {
+  const leftRows = Array.isArray(left) ? left : [];
+  const rightRows = Array.isArray(right) ? right : [];
+  return JSON.stringify(leftRows) === JSON.stringify(rightRows);
+}
+
 function ensureProductPayload(product, markupPercent) {
   const handle = buildHandle(product.name);
   if (!handle) {
@@ -260,7 +266,7 @@ async function upsertProduct(productPayload, previousState) {
   const caseVariant = productPayload.variants.find(variant => normalizeVariantKey(variant.title).startsWith('case'));
   const boxVariant = productPayload.variants.find(variant => normalizeVariantKey(variant.title) === 'box');
 
-  return {
+  const nextState = {
     shopifyProductId: syncedProduct.id,
     imageHash,
     imageFileName: productPayload.image ? productPayload.image.fileName : null,
@@ -270,6 +276,38 @@ async function upsertProduct(productPayload, previousState) {
     sourceCurrency: productPayload.sourceCurrency,
     pricingByCurrency: Array.isArray(productPayload.pricingByCurrency) ? productPayload.pricingByCurrency : [],
     markupPercentApplied: Number(productPayload.markupPercentApplied || 0)
+  };
+
+  const changedFields = [];
+  if (!previousState.shopifyProductId || String(previousState.shopifyProductId) !== String(nextState.shopifyProductId)) {
+    changedFields.push('shopifyProductId');
+  }
+  if (String(previousState.imageHash || '') !== String(nextState.imageHash || '')) {
+    changedFields.push('imageHash');
+  }
+  if (String(previousState.lastPrice || '') !== String(nextState.lastPrice || '')) {
+    changedFields.push('lastPrice');
+  }
+  if (String(previousState.lastCasePrice || '') !== String(nextState.lastCasePrice || '')) {
+    changedFields.push('lastCasePrice');
+  }
+  if (String(previousState.lastBoxPrice || '') !== String(nextState.lastBoxPrice || '')) {
+    changedFields.push('lastBoxPrice');
+  }
+  if (String(previousState.sourceCurrency || '') !== String(nextState.sourceCurrency || '')) {
+    changedFields.push('sourceCurrency');
+  }
+  if (Number(previousState.markupPercentApplied || 0) !== Number(nextState.markupPercentApplied || 0)) {
+    changedFields.push('markupPercentApplied');
+  }
+  if (!areEqualPricingRows(previousState.pricingByCurrency, nextState.pricingByCurrency)) {
+    changedFields.push('pricingByCurrency');
+  }
+
+  return {
+    ...nextState,
+    didChange: changedFields.length > 0,
+    changedFields
   };
 }
 
@@ -286,6 +324,11 @@ async function runCatalogSync(options = {}) {
     scanned: catalogProducts.length,
     processed: 0,
     synced: 0,
+    changed: 0,
+    unchanged: 0,
+    currentProduct: null,
+    recentProducts: [],
+    changedProducts: [],
     skipped: 0,
     errors: []
   };
@@ -296,11 +339,36 @@ async function runCatalogSync(options = {}) {
 
   for (let index = 0; index < catalogProducts.length; index += 1) {
     const product = catalogProducts[index];
+    const productHandle = buildHandle(product.name) || '';
+    const productImageUrl = product && product.image && product.image.fileName
+      ? `/images/${encodeURIComponent(product.image.fileName)}`
+      : String(product.fallbackImageUrl || '');
+
+    summary.currentProduct = {
+      title: product.name || '-',
+      handle: productHandle,
+      index: index + 1,
+      total: catalogProducts.length,
+      imageUrl: productImageUrl
+    };
+
+    if (onProgress) {
+      onProgress({ ...summary, errorsCount: summary.errors.length, stage: 'running' });
+    }
+
     try {
       const payload = ensureProductPayload(product, markupPercent);
       if (!payload) {
         summary.skipped += 1;
         summary.processed = index + 1;
+        summary.recentProducts = [
+          {
+            title: product.name || '-',
+            handle: productHandle,
+            status: 'skipped'
+          },
+          ...summary.recentProducts
+        ].slice(0, 10);
         if (onProgress) {
           onProgress({ ...summary, errorsCount: summary.errors.length, stage: 'running' });
         }
@@ -309,19 +377,57 @@ async function runCatalogSync(options = {}) {
 
       const previous = state.products[payload.handle] || {};
       const next = await upsertProduct(payload, previous);
+      const { didChange, changedFields, ...persistedNext } = next;
 
       state.products[payload.handle] = {
         ...previous,
-        ...next,
+        ...persistedNext,
         title: payload.title,
         updatedAt: new Date().toISOString()
       };
 
       summary.synced += 1;
+      if (didChange) {
+        summary.changed += 1;
+        summary.changedProducts.push({
+          title: payload.title,
+          handle: payload.handle,
+          casePrice: persistedNext.lastCasePrice,
+          boxPrice: persistedNext.lastBoxPrice,
+          sourceCurrency: persistedNext.sourceCurrency,
+          changedFields
+        });
+        summary.recentProducts = [
+          {
+            title: payload.title,
+            handle: payload.handle,
+            status: 'changed'
+          },
+          ...summary.recentProducts
+        ].slice(0, 10);
+      } else {
+        summary.unchanged += 1;
+        summary.recentProducts = [
+          {
+            title: payload.title,
+            handle: payload.handle,
+            status: 'unchanged'
+          },
+          ...summary.recentProducts
+        ].slice(0, 10);
+      }
       summary.processed = index + 1;
     } catch (error) {
       summary.errors.push({ productName: product.name, message: error.message });
       summary.processed = index + 1;
+      summary.recentProducts = [
+        {
+          title: product.name || '-',
+          handle: productHandle,
+          status: 'error'
+        },
+        ...summary.recentProducts
+      ].slice(0, 10);
     }
 
     if (onProgress) {
@@ -331,6 +437,7 @@ async function runCatalogSync(options = {}) {
 
   state.lastSync = {
     ...summary,
+    currentProduct: null,
     finishedAt: new Date().toISOString()
   };
 

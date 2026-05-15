@@ -122,9 +122,53 @@ async function addOrReplaceProductImage(productId, imageInfo) {
   return data.image;
 }
 
+async function listProductsPage(options = {}) {
+  const limit = Number(options.limit) > 0 ? Math.min(250, Number(options.limit)) : 250;
+  const sinceId = Number(options.sinceId || 0);
+  const fields = options.fields || 'id,title,handle,tags,variants,images,updated_at';
+
+  const query = new URLSearchParams({
+    limit: String(limit),
+    fields
+  });
+
+  if (sinceId > 0) {
+    query.set('since_id', String(sinceId));
+  }
+
+  const data = await request('GET', `/products.json?${query.toString()}`);
+  return Array.isArray(data.products) ? data.products : [];
+}
+
+async function listAllProducts(options = {}) {
+  const limit = Number(options.limit) > 0 ? Math.min(250, Number(options.limit)) : 250;
+  const pagesSafetyLimit = Number(options.pagesSafetyLimit) > 0 ? Number(options.pagesSafetyLimit) : 200;
+  const fields = options.fields || 'id,title,handle,tags,variants,images,updated_at';
+  const products = [];
+
+  let sinceId = 0;
+  for (let page = 0; page < pagesSafetyLimit; page += 1) {
+    const pageItems = await listProductsPage({ limit, sinceId, fields });
+    if (!pageItems.length) {
+      break;
+    }
+
+    products.push(...pageItems);
+    const last = pageItems[pageItems.length - 1];
+    sinceId = Number(last && last.id ? last.id : 0);
+
+    if (!sinceId || pageItems.length < limit) {
+      break;
+    }
+  }
+
+  return products;
+}
+
 module.exports = {
   findProductByHandle,
   createProduct,
   updateProduct,
-  addOrReplaceProductImage
+  addOrReplaceProductImage,
+  listAllProducts
 };
