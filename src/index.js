@@ -960,10 +960,130 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           z-index: 1;
         }
 
+        .sse-lab-widget {
+          margin-top: 12px;
+          border: 1px solid rgba(13, 98, 63, 0.26);
+          border-radius: 14px;
+          background:
+            radial-gradient(circle at 14% -30%, rgba(82, 236, 143, 0.2) 0%, rgba(82, 236, 143, 0) 46%),
+            linear-gradient(160deg, #f7fff9 0%, #edfff3 42%, #f8fffb 100%);
+          padding: 16px;
+          box-shadow:
+            0 16px 34px rgba(17, 72, 47, 0.08),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+          display: grid;
+          gap: 12px;
+        }
+
+        .sse-lab-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+        }
+
+        .sse-lab-title {
+          margin: 0;
+          color: #0d5d3d;
+          font-size: 13px;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        .sse-lab-chip {
+          border-radius: 999px;
+          border: 1px solid rgba(13, 98, 63, 0.28);
+          background: rgba(255, 255, 255, 0.72);
+          color: #0c6a45;
+          font-size: 10px;
+          letter-spacing: 0.07em;
+          text-transform: uppercase;
+          padding: 5px 10px;
+          white-space: nowrap;
+        }
+
+        .sse-lab-copy {
+          margin: 0;
+          color: #1e3f31;
+          font-size: 12px;
+        }
+
+        .sse-lab-track {
+          width: 100%;
+          height: 12px;
+          border-radius: 999px;
+          border: 1px solid rgba(19, 123, 75, 0.22);
+          background: linear-gradient(180deg, #dffbe9 0%, #ccf2dc 100%);
+          overflow: hidden;
+        }
+
+        .sse-lab-fill {
+          height: 100%;
+          border-radius: inherit;
+          background:
+            linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(214, 255, 231, 0.92) 50%, rgba(255, 255, 255, 0) 100%),
+            linear-gradient(90deg, #13a864 0%, #1fd179 52%, #0fa95f 100%);
+          background-size: 190px 100%, 100% 100%;
+          background-position: -190px 0, 0 0;
+          transition: width 200ms linear;
+          animation: sse-lab-shine 1.5s linear infinite;
+          box-shadow: 0 0 16px rgba(29, 195, 101, 0.45);
+        }
+
+        .sse-lab-metrics {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .sse-lab-metric {
+          border: 1px solid rgba(13, 98, 63, 0.16);
+          border-radius: 10px;
+          background: rgba(255, 255, 255, 0.7);
+          padding: 8px 10px;
+          display: grid;
+          gap: 2px;
+        }
+
+        .sse-lab-metric-label {
+          color: #4f6f61;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+
+        .sse-lab-metric-value {
+          color: #0d5d3d;
+          font-size: 14px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+        }
+
+        .sse-lab-product {
+          margin: 0;
+          font-size: 12px;
+          color: #325847;
+          line-height: 1.45;
+        }
+
+        .sse-lab-product strong {
+          color: #0d5d3d;
+        }
+
+        @keyframes sse-lab-shine {
+          to {
+            background-position: 190px 0, 0 0;
+          }
+        }
+
         @media (max-width: 960px) {
           .hero,
           .grid {
             grid-template-columns: 1fr;
+          }
+
+          .sse-lab-metrics {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
           }
 
           button {
@@ -1019,6 +1139,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         <section class="sync-live-full-row">
           ${syncLiveFallbackMarkup}
           <div id="sync-react-root"></div>
+          <div id="sync-sse-lab-root" class="sse-lab-widget"></div>
         </section>
 
         <section class="grid">
@@ -1302,6 +1423,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           const rootNode = document.getElementById('sync-react-root');
           const liveFallbackNode = document.getElementById('sync-live-fallback');
           const fallbackNode = document.getElementById('sync-fallback-root');
+          const sseLabNode = document.getElementById('sync-sse-lab-root');
           const bootstrapNode = document.getElementById('dashboard-bootstrap');
           if (!bootstrapNode) {
             return;
@@ -1397,6 +1519,122 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             }
             return response.json();
           }
+
+          function renderSseLabWidget(payload) {
+            if (!sseLabNode) {
+              return;
+            }
+
+            const sync = payload && payload.sync ? payload.sync : {};
+            const running = Boolean(sync.running);
+            const scanned = Number(sync.scanned || 0);
+            const processed = Number(sync.processed || 0);
+            const progressPercent = scanned > 0
+              ? Math.min(100, Math.round((processed / scanned) * 100))
+              : 0;
+            const currentProduct = sync.currentProduct || null;
+            const pulseLabel = running ? 'SSE attivo · stream in tempo reale' : 'SSE in attesa · polling di controllo';
+
+            sseLabNode.innerHTML = [
+              '<div class="sse-lab-head">',
+              '<p class="sse-lab-title">Widget sperimentale solo SSE</p>',
+              '<span class="sse-lab-chip">' + escapeHtml(pulseLabel) + '</span>',
+              '</div>',
+              '<p class="sse-lab-copy">Timeline live separata dal widget React, pensata per confrontare la reattività del canale SSE puro.</p>',
+              '<div class="sse-lab-track">',
+              '<div class="sse-lab-fill" style="width:' + progressPercent + '%;"></div>',
+              '</div>',
+              '<div class="sse-lab-metrics">',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Stato</span><span class="sse-lab-metric-value">' + (running ? 'RUN' : 'IDLE') + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Progresso</span><span class="sse-lab-metric-value">' + progressPercent + '%</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Processati</span><span class="sse-lab-metric-value">' + processed + '/' + scanned + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Sincronizzati</span><span class="sse-lab-metric-value">' + Number(sync.synced || 0) + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Cambiati</span><span class="sse-lab-metric-value">' + Number(sync.changed || 0) + '</span></div>',
+              '<div class="sse-lab-metric"><span class="sse-lab-metric-label">Errori</span><span class="sse-lab-metric-value">' + Number(sync.errorsCount || 0) + '</span></div>',
+              '</div>',
+              currentProduct
+                ? '<p class="sse-lab-product">Prodotto in lavorazione: <strong>' + escapeHtml(currentProduct.title || 'prodotto') + '</strong> (' + escapeHtml((currentProduct.index || 0) + '/' + (currentProduct.total || scanned || 0)) + ')</p>'
+                : '<p class="sse-lab-product">In attesa del prossimo batch di prodotti da sincronizzare.</p>'
+            ].join('');
+          }
+
+          function startSseLabWidget() {
+            if (!sseLabNode) {
+              return function () {};
+            }
+
+            let stream = null;
+            let timer = null;
+            let stopped = false;
+            let currentPollDelay = 2000;
+
+            const closeStream = function () {
+              if (stream) {
+                stream.close();
+                stream = null;
+              }
+            };
+
+            const scheduleNextPoll = function () {
+              if (stopped) {
+                return;
+              }
+              timer = setTimeout(poll, currentPollDelay);
+            };
+
+            const applyPayload = function (payload) {
+              const nextSync = payload && payload.sync ? payload.sync : null;
+              if (!nextSync) {
+                return;
+              }
+
+              renderSseLabWidget(payload);
+              currentPollDelay = nextSync.running ? 450 : 2000;
+
+              if (nextSync.running) {
+                if (!stream && typeof window.EventSource === 'function') {
+                  try {
+                    stream = new window.EventSource('/app/sync/stream');
+                    stream.addEventListener('sync', function (event) {
+                      try {
+                        applyPayload(JSON.parse(event.data || '{}'));
+                      } catch (_error) {
+                        // Ignore malformed stream payloads.
+                      }
+                    });
+                  } catch (_error) {
+                    stream = null;
+                  }
+                }
+              } else {
+                closeStream();
+              }
+            };
+
+            const poll = async function () {
+              try {
+                const payload = await fetchSyncSnapshot();
+                applyPayload(payload);
+              } catch (_error) {
+                // Ignore transient polling errors.
+              } finally {
+                scheduleNextPoll();
+              }
+            };
+
+            renderSseLabWidget({ sync: bootstrap.sync || {} });
+            poll();
+
+            return function () {
+              stopped = true;
+              if (timer) {
+                clearTimeout(timer);
+              }
+              closeStream();
+            };
+          }
+
+          const disposeSseLabWidget = startSseLabWidget();
 
           function startFallbackPolling() {
             let socket = null;
@@ -1531,6 +1769,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
           if (!rootNode || !window.React || !window.ReactDOM) {
             startFallbackPolling();
+            window.addEventListener('beforeunload', disposeSseLabWidget);
             return;
           }
 
@@ -1882,6 +2121,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             }
             startFallbackPolling();
           }
+
+          window.addEventListener('beforeunload', disposeSseLabWidget);
         })();
       </script>
     </body>
@@ -1966,11 +2207,27 @@ function setNoStoreHeaders(res) {
   res.set('Expires', '0');
 }
 
+function getCachedLastSync() {
+  if (typeof latestLastSyncCache === 'undefined') {
+    return null;
+  }
+
+  if (latestLastSyncCache === null) {
+    try {
+      latestLastSyncCache = stateStore.readState().lastSync || null;
+    } catch (_error) {
+      latestLastSyncCache = null;
+    }
+  }
+
+  return latestLastSyncCache;
+}
+
 function buildSyncSnapshotPayload(lastSyncOverride) {
   const effectiveSync = getEffectiveSyncRuntime();
   const shouldReadState = typeof lastSyncOverride === 'undefined';
   const lastSync = shouldReadState
-    ? (stateStore.readState().lastSync || null)
+    ? getCachedLastSync()
     : lastSyncOverride;
 
   return {
@@ -2027,6 +2284,7 @@ app.get('/app/state', (_req, res) => {
   const sendState = async () => {
     setNoStoreHeaders(res);
     const state = stateStore.readState();
+    latestLastSyncCache = state.lastSync || null;
     const snapshot = buildSyncSnapshotPayload(state.lastSync || null);
     res.json({
       state,
@@ -2258,6 +2516,7 @@ app.use((err, req, res, next) => {
 
 let isSyncRunning = false;
 let isHydratingProducts = false;
+let latestLastSyncCache = null;
 const syncEvents = new EventEmitter();
 syncEvents.setMaxListeners(0);
 
@@ -2502,6 +2761,7 @@ function startSync(trigger) {
         synced: report.synced,
         errors: report.errors.length
       });
+      latestLastSyncCache = report;
     } catch (error) {
       console.error('[SYNC] failed', { trigger, error: error.message });
     } finally {
