@@ -14,7 +14,7 @@ function required(name) {
 
 const dataDir = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
-  : path.resolve(__dirname, '..', '..', 'data');
+  : path.resolve(__dirname, '..', 'data');
 const imageDir = path.resolve(dataDir, 'images');
 const stateFile = path.resolve(dataDir, 'state.json');
 
