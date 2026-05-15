@@ -109,6 +109,18 @@ async function updateProduct(productId, productPayload) {
 }
 
 async function addOrReplaceProductImage(productId, imageInfo) {
+  const existingImagesPayload = await request('GET', `/products/${productId}/images.json?fields=id`);
+  const existingImages = Array.isArray(existingImagesPayload && existingImagesPayload.images)
+    ? existingImagesPayload.images
+    : [];
+
+  for (const existingImage of existingImages) {
+    if (!existingImage || !existingImage.id) {
+      continue;
+    }
+    await request('DELETE', `/products/${productId}/images/${existingImage.id}.json`);
+  }
+
   const attachment = fs.readFileSync(imageInfo.filePath).toString('base64');
   const payload = {
     image: {
