@@ -1,0 +1,5 @@
+name = "iyc-catalog-connector-backend"
+roles = ["frontend", "backend"]
+
+[commands]
+dev = "npm start"
