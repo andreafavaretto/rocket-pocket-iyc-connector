@@ -114,19 +114,19 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
       <style>
         :root {
-          --bg: #09090b;
-          --bg-grad-1: rgba(255, 255, 255, 0.04);
-          --bg-grad-2: rgba(127, 29, 29, 0.10);
-          --panel: rgba(24, 24, 27, 0.88);
+          --bg: #050506;
+          --bg-grad-1: rgba(185, 28, 28, 0.12);
+          --bg-grad-2: rgba(255, 255, 255, 0.03);
+          --panel: rgba(14, 14, 18, 0.92);
           --ink: #fafafa;
-          --muted: #a1a1aa;
-          --line: #27272a;
-          --accent: #2563eb;
-          --accent-strong: #1d4ed8;
+          --muted: #b0b0ba;
+          --line: #2a2a31;
+          --accent: #b91c1c;
+          --accent-strong: #7f1d1d;
           --warn: #f87171;
           --ok: #34d399;
-          --input-bg: #18181b;
-          --chip-bg: #111113;
+          --input-bg: #141417;
+          --chip-bg: #111114;
           --shadow: 0 18px 48px rgba(31, 36, 31, 0.08);
           color-scheme: dark;
         }
@@ -157,7 +157,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           background:
             radial-gradient(circle at top left, var(--bg-grad-1), transparent 28%),
             radial-gradient(circle at top right, var(--bg-grad-2), transparent 22%),
-            linear-gradient(180deg, #0b0b0f 0%, var(--bg) 100%);
+            linear-gradient(180deg, #09090b 0%, var(--bg) 100%);
         }
 
         .shell {
@@ -179,16 +179,19 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           backdrop-filter: blur(8px);
           border: 1px solid var(--line);
           border-radius: 24px;
-          box-shadow: var(--shadow);
+          box-shadow:
+            0 18px 48px rgba(0, 0, 0, 0.32),
+            inset 0 1px 0 rgba(255, 255, 255, 0.04);
         }
 
         .hero-main {
           padding: 28px;
+          border-left: 2px solid rgba(185, 28, 28, 0.55);
         }
 
         .eyebrow {
           margin: 0 0 10px;
-          color: var(--accent);
+          color: #fca5a5;
           font-size: 12px;
           letter-spacing: 0.18em;
           text-transform: uppercase;
@@ -206,7 +209,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .lead {
           margin: 12px 0 0;
           max-width: 56ch;
-          color: var(--muted);
+          color: #a8a8b4;
           font-size: 13px;
           line-height: 1.55;
         }
@@ -220,7 +223,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .metric-label {
           margin: 0 0 4px;
-          color: var(--muted);
+          color: #9c9ca6;
           font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.16em;
@@ -239,7 +242,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           padding: 14px 18px;
           border-radius: 16px;
           border: 1px solid var(--line);
-          background: rgba(24, 24, 27, 0.72);
+          background: rgba(14, 14, 18, 0.82);
         }
 
         .flash.info { color: var(--accent-strong); }
@@ -272,7 +275,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .card p,
         .card li,
         .card label {
-          color: var(--muted);
+          color: #a4a4af;
           line-height: 1.5;
           font-size: 12px;
         }
@@ -297,18 +300,18 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           border: 0;
           border-radius: 999px;
           padding: 11px 14px;
-          background: linear-gradient(135deg, #ef4444 0%, #991b1b 55%, #0f0f10 100%);
-          color: #fff7f7;
+          background: linear-gradient(135deg, #fca5a5 0%, #b91c1c 42%, #1b1b20 100%);
+          color: #fff9f9;
           font: inherit;
           font-weight: 800;
           cursor: pointer;
           text-transform: uppercase;
           letter-spacing: 0.12em;
           font-size: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.12);
+          border: 1px solid rgba(255, 255, 255, 0.10);
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.22),
-            0 10px 24px rgba(127, 29, 29, 0.28);
+            inset 0 1px 0 rgba(255, 255, 255, 0.18),
+            0 12px 28px rgba(127, 29, 29, 0.38);
           transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
         }
 
@@ -326,11 +329,11 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         button.secondary {
-          background: linear-gradient(135deg, #18181b 0%, #27272a 100%);
-          color: #f4f4f5;
+          background: linear-gradient(135deg, #121214 0%, #1f1f24 100%);
+          color: #f5f5f7;
           box-shadow:
-            inset 0 1px 0 rgba(255, 255, 255, 0.08),
-            0 10px 24px rgba(9, 9, 11, 0.24);
+            inset 0 1px 0 rgba(255, 255, 255, 0.06),
+            0 10px 24px rgba(0, 0, 0, 0.26);
         }
 
         .table-wrap {
@@ -364,7 +367,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         th {
-          color: var(--muted);
+          color: #9b9ba4;
           font-size: 13px;
           text-transform: uppercase;
           letter-spacing: 0.08em;
@@ -376,7 +379,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         }
 
         .empty {
-          color: var(--muted);
+          color: #9e9ea8;
           text-align: center;
           padding: 28px;
         }
