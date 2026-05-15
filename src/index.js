@@ -115,8 +115,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <style>
         :root {
           --bg: #09090b;
-          --bg-grad-1: rgba(37, 99, 235, 0.12);
-          --bg-grad-2: rgba(14, 165, 233, 0.10);
+          --bg-grad-1: rgba(255, 255, 255, 0.04);
+          --bg-grad-2: rgba(127, 29, 29, 0.10);
           --panel: rgba(24, 24, 27, 0.88);
           --ink: #fafafa;
           --muted: #a1a1aa;
@@ -152,7 +152,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         body {
           margin: 0;
           font-family: 'Manrope', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          font-size: 13.5px;
+          font-size: 12.5px;
           color: var(--ink);
           background:
             radial-gradient(circle at top left, var(--bg-grad-1), transparent 28%),
@@ -182,20 +182,6 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           box-shadow: var(--shadow);
         }
 
-        .theme-toggle {
-          justify-self: end;
-          border: 1px solid var(--line);
-          background: var(--chip-bg);
-          color: var(--ink);
-          border-radius: 10px;
-          padding: 9px 11px;
-          font-size: 11px;
-          text-transform: uppercase;
-          letter-spacing: 0.14em;
-          line-height: 1;
-          cursor: pointer;
-        }
-
         .hero-main {
           padding: 28px;
         }
@@ -211,17 +197,17 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         h1 {
           margin: 0;
           font-family: 'Space Grotesk', 'Manrope', sans-serif;
-          font-size: clamp(1.8rem, 3.4vw, 3.1rem);
-          line-height: 0.98;
-          letter-spacing: -0.06em;
+          font-size: clamp(1.5rem, 2.8vw, 2.45rem);
+          line-height: 1;
+          letter-spacing: -0.07em;
           font-weight: 700;
         }
 
         .lead {
-          margin: 14px 0 0;
+          margin: 12px 0 0;
           max-width: 56ch;
           color: var(--muted);
-          font-size: 14px;
+          font-size: 13px;
           line-height: 1.55;
         }
 
@@ -237,12 +223,12 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           color: var(--muted);
           font-size: 10px;
           text-transform: uppercase;
-          letter-spacing: 0.18em;
+          letter-spacing: 0.16em;
         }
 
         .metric-value {
           margin: 0;
-          font-size: 22px;
+          font-size: 18px;
           line-height: 1;
           font-weight: 700;
           letter-spacing: -0.04em;
@@ -278,7 +264,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .card h2 {
           margin: 0 0 14px;
           font-family: 'Space Grotesk', 'Manrope', sans-serif;
-          font-size: 18px;
+          font-size: 15px;
           font-weight: 700;
           letter-spacing: -0.04em;
         }
@@ -288,7 +274,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .card label {
           color: var(--muted);
           line-height: 1.5;
-          font-size: 13px;
+          font-size: 12px;
         }
 
         form {
@@ -298,7 +284,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         input[type="number"] {
           width: 100%;
-          padding: 12px 14px;
+          padding: 11px 13px;
           border-radius: 12px;
           border: 1px solid var(--line);
           background: var(--input-bg);
@@ -310,7 +296,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           appearance: none;
           border: 0;
           border-radius: 999px;
-          padding: 12px 16px;
+          padding: 11px 14px;
           background: linear-gradient(135deg, #ef4444 0%, #991b1b 55%, #0f0f10 100%);
           color: #fff7f7;
           font: inherit;
@@ -318,7 +304,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           cursor: pointer;
           text-transform: uppercase;
           letter-spacing: 0.12em;
-          font-size: 11px;
+          font-size: 10px;
           border: 1px solid rgba(255, 255, 255, 0.12);
           box-shadow:
             inset 0 1px 0 rgba(255, 255, 255, 0.22),
@@ -406,8 +392,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             grid-template-columns: 1fr;
           }
 
-          button,
-          .theme-toggle {
+          button {
             width: 100%;
           }
         }
@@ -423,7 +408,6 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
             <p class="lead">Questa app ora usa il backend del progetto come dashboard operativa. Da qui puoi forzare il sync del catalogo Google Sheets verso Shopify, aggiornare la marginalità percentuale e controllare gli ultimi prodotti sincronizzati.</p>
           </article>
           <aside class="panel hero-side">
-            <button type="button" class="theme-toggle" id="theme-toggle">Tema: Dark</button>
             <div>
               <p class="metric-label">Store Shopify</p>
               <p class="metric-value">${escapeHtml(config.shopify.storeDomain)}</p>
@@ -512,37 +496,6 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           </article>
         </section>
       </main>
-      <script>
-        (function () {
-          const STORAGE_KEY = 'iyc-theme';
-          const root = document.documentElement;
-          const saved = localStorage.getItem(STORAGE_KEY);
-          const initial = saved === 'light' || saved === 'dark'
-            ? saved
-            : 'dark';
-          root.setAttribute('data-theme', initial);
-
-          const button = document.getElementById('theme-toggle');
-          if (!button) {
-            return;
-          }
-
-          const syncLabel = function () {
-            const current = root.getAttribute('data-theme') || 'dark';
-            button.textContent = current === 'dark' ? 'Tema: Dark' : 'Tema: Light';
-          };
-
-          syncLabel();
-
-          button.addEventListener('click', function () {
-            const current = root.getAttribute('data-theme') || 'dark';
-            const next = current === 'dark' ? 'light' : 'dark';
-            root.setAttribute('data-theme', next);
-            localStorage.setItem(STORAGE_KEY, next);
-            syncLabel();
-          });
-        })();
-      </script>
       <script id="dashboard-bootstrap" type="application/json">${serializeForScript(initialDashboardPayload)}</script>
       <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
       <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
