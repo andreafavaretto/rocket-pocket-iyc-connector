@@ -109,6 +109,9 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>IYC Catalog Connector</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+      <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
       <style>
         :root {
           --bg: #09090b;
@@ -148,7 +151,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         * { box-sizing: border-box; }
         body {
           margin: 0;
-          font-family: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+          font-family: 'Manrope', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          font-size: 13.5px;
           color: var(--ink);
           background:
             radial-gradient(circle at top left, var(--bg-grad-1), transparent 28%),
@@ -184,8 +188,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           background: var(--chip-bg);
           color: var(--ink);
           border-radius: 10px;
-          padding: 10px 12px;
-          font-size: 13px;
+          padding: 9px 11px;
+          font-size: 11px;
+          text-transform: uppercase;
+          letter-spacing: 0.14em;
           line-height: 1;
           cursor: pointer;
         }
@@ -204,17 +210,19 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         h1 {
           margin: 0;
-          font-size: clamp(2rem, 4vw, 3.8rem);
-          line-height: 0.95;
-          letter-spacing: -0.04em;
+          font-family: 'Space Grotesk', 'Manrope', sans-serif;
+          font-size: clamp(1.8rem, 3.4vw, 3.1rem);
+          line-height: 0.98;
+          letter-spacing: -0.06em;
+          font-weight: 700;
         }
 
         .lead {
-          margin: 16px 0 0;
-          max-width: 52ch;
+          margin: 14px 0 0;
+          max-width: 56ch;
           color: var(--muted);
-          font-size: 18px;
-          line-height: 1.5;
+          font-size: 14px;
+          line-height: 1.55;
         }
 
         .hero-side {
@@ -227,15 +235,17 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .metric-label {
           margin: 0 0 4px;
           color: var(--muted);
-          font-size: 13px;
+          font-size: 10px;
           text-transform: uppercase;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.18em;
         }
 
         .metric-value {
           margin: 0;
-          font-size: 28px;
+          font-size: 22px;
           line-height: 1;
+          font-weight: 700;
+          letter-spacing: -0.04em;
         }
 
         .flash {
@@ -267,7 +277,10 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         .card h2 {
           margin: 0 0 14px;
-          font-size: 24px;
+          font-family: 'Space Grotesk', 'Manrope', sans-serif;
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: -0.04em;
         }
 
         .card p,
@@ -275,6 +288,7 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
         .card label {
           color: var(--muted);
           line-height: 1.5;
+          font-size: 13px;
         }
 
         form {
@@ -284,8 +298,8 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
 
         input[type="number"] {
           width: 100%;
-          padding: 14px 16px;
-          border-radius: 14px;
+          padding: 12px 14px;
+          border-radius: 12px;
           border: 1px solid var(--line);
           background: var(--input-bg);
           font: inherit;
@@ -296,17 +310,41 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           appearance: none;
           border: 0;
           border-radius: 999px;
-          padding: 14px 18px;
-          background: var(--accent);
-          color: #f6f1e8;
+          padding: 12px 16px;
+          background: linear-gradient(135deg, #ef4444 0%, #991b1b 55%, #0f0f10 100%);
+          color: #fff7f7;
           font: inherit;
-          font-weight: 700;
+          font-weight: 800;
           cursor: pointer;
+          text-transform: uppercase;
+          letter-spacing: 0.12em;
+          font-size: 11px;
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 10px 24px rgba(127, 29, 29, 0.28);
+          transition: transform 140ms ease, box-shadow 140ms ease, filter 140ms ease;
+        }
+
+        button:hover {
+          transform: translateY(-1px);
+          filter: brightness(1.04);
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.24),
+            0 14px 30px rgba(127, 29, 29, 0.34);
+        }
+
+        button:active {
+          transform: translateY(0);
+          filter: brightness(0.98);
         }
 
         button.secondary {
-          background: var(--chip-bg);
-          color: var(--ink);
+          background: linear-gradient(135deg, #18181b 0%, #27272a 100%);
+          color: #f4f4f5;
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.08),
+            0 10px 24px rgba(9, 9, 11, 0.24);
         }
 
         .table-wrap {
@@ -366,6 +404,11 @@ function renderDashboard({ state, flashMessage = '', flashType = 'info', isSyncR
           .hero,
           .grid {
             grid-template-columns: 1fr;
+          }
+
+          button,
+          .theme-toggle {
+            width: 100%;
           }
         }
       </style>
